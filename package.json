@@ -1,0 +1,37 @@
+{
+  "name": "teamwork-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Production-ready MCP server for Teamwork.com task workflows, comments, time logging, and stage moves",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/*.js",
+    "task:move-stage": "node src/task-stage.js",
+    "task:create-mock": "node --input-type=module -e \"import { loadConfig } from './src/config.js'; import { TeamworkClient } from './src/teamworkClient.js'; const client = new TeamworkClient(loadConfig()); const created = await client.createTask({ projectId: 1216946, taskListId: 3691036, title: 'MOCK TASK - MCP stage move validation', description: 'Temporary mock task to validate local MCP stage movement improvements.' }); const taskId = created?.id ?? created?.task?.id ?? created?.TASKID ?? created?.taskId ?? created?.['todo-item']?.id ?? created?.todoItem?.id; console.log(JSON.stringify({ success: true, taskId, created }, null, 2));\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:corcronje/teamwork-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/corcronje/teamwork-mcp/issues"
+  },
+  "homepage": "https://github.com/corcronje/teamwork-mcp#readme",
+  "keywords": [
+    "mcp",
+    "teamwork",
+    "model-context-protocol",
+    "agent-tools",
+    "automation"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

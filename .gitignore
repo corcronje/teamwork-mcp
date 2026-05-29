@@ -1,0 +1,13 @@
+node_modules
+.env
+npm-debug.log*
+.DS_Store
+
+# Local analysis/scratch artifacts
+.stage-samples.txt
+.task-analysis.txt
+.task-structure.txt
+
+# Editor/runtime leftovers
+.vscode/
+*.log
