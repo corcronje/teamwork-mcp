@@ -4,6 +4,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { TeamworkClient } from "./teamworkClient.js";
+import { logger } from "./logger.js";
+import { MCPError, ValidationError, formatValidationError, AuthorizationError } from "./errors.js";
 
 const config = loadConfig();
 const client = new TeamworkClient(config);
@@ -18,7 +20,7 @@ const EDCTP_STAGE_ALIASES = {
 const server = new Server(
   {
     name: "teamwork-mcp-server",
-    version: "0.1.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
@@ -26,6 +28,12 @@ const server = new Server(
     },
   }
 );
+
+logger.info("Teamwork MCP server initialized", {
+  version: "2.0.0",
+  readOnly: config.readOnly,
+  allowedProjectIds: config.allowedProjectIds.length || "none",
+});
 
 const schemas = {
   getMyTasks: z.object({
@@ -329,6 +337,55 @@ function textResult(payload) {
   };
 }
 
+/**
+ * Format error for MCP response
+ */
+function formatMCPError(error) {
+  // If already an MCPError, use its MCP format
+  if (error instanceof MCPError) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(error.toMCPError(), null, 2),
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Handle Zod validation errors
+  if (error?.issues) {
+    const validationError = new ValidationError(formatValidationError(error));
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(validationError.toMCPError(), null, 2),
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Generic error handling
+  const message = error instanceof Error ? error.message : String(error);
+  const serverError = new MCPError(message, {
+    code: "INTERNAL_ERROR",
+    status: 500,
+  });
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(serverError.toMCPError(), null, 2),
+      },
+    ],
+    isError: true,
+  };
+}
+
 function getCreatedTaskId(payload) {
   return (
     payload?.id ??
@@ -345,7 +402,9 @@ function resolveStageMoveTarget({ stage, workflowId, stageId }) {
   const resolvedStageId = stageId ?? (stage ? EDCTP_STAGE_ALIASES[stage] : undefined);
 
   if (resolvedStageId === undefined || resolvedStageId === null) {
-    throw new Error("Missing destination stage: provide stageId or stage alias (selected, in_progress, qa_ready)");
+    throw new ValidationError("Missing destination stage: provide stageId or stage alias (selected, in_progress, qa_ready)", {
+      context: { provided: { stage, workflowId, stageId } },
+    });
   }
 
   return {
@@ -356,7 +415,7 @@ function resolveStageMoveTarget({ stage, workflowId, stageId }) {
 
 function ensureWriteAllowed(projectId) {
   if (config.readOnly) {
-    throw new Error("Write action blocked: TEAMWORK_READ_ONLY=true");
+    throw new AuthorizationError("Write action blocked: TEAMWORK_READ_ONLY=true");
   }
 
   if (!config.allowedProjectIds.length) {
@@ -368,7 +427,9 @@ function ensureWriteAllowed(projectId) {
   }
 
   if (!config.allowedProjectIds.includes(String(projectId))) {
-    throw new Error(`Write action blocked: project ${projectId} is not in TEAMWORK_ALLOWED_PROJECT_IDS`);
+    throw new AuthorizationError(`Write action blocked: project ${projectId} is not in TEAMWORK_ALLOWED_PROJECT_IDS`, {
+      context: { projectId, allowedProjects: config.allowedProjectIds },
+    });
   }
 }
 
@@ -377,148 +438,172 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const name = request.params.name;
   const args = request.params.arguments || {};
+  const startTime = Date.now();
 
   try {
     switch (name) {
       case "teamwork_get_my_tasks": {
-        const parsed = schemas.getMyTasks.parse(args);
-        const data = await client.getMyTasks(parsed);
+        const parsed = schemas.getMyTasks.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getMyTasks(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_get_project_tasks": {
-        const parsed = schemas.getProjectTasks.parse(args);
-        const data = await client.getProjectTasks(parsed);
+        const parsed = schemas.getProjectTasks.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getProjectTasks(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_get_task_detail": {
-        const parsed = schemas.getTaskDetail.parse(args);
-        const data = await client.getTask(parsed);
+        const parsed = schemas.getTaskDetail.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getTask(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_create_task": {
-        const parsed = schemas.createTask.parse(args);
-        ensureWriteAllowed(parsed.projectId);
-        const data = await client.createTask(parsed);
+        const parsed = schemas.createTask.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        ensureWriteAllowed(parsed.data.projectId);
+        const data = await client.createTask(parsed.data);
 
-        if (parsed.workflowId && parsed.stageId) {
+        if (parsed.data.workflowId && parsed.data.stageId) {
           const createdTaskId = getCreatedTaskId(data);
           if (!createdTaskId) {
-            throw new Error("Task was created but could not infer task ID for workflow stage move");
+            throw new ValidationError("Task was created but could not infer task ID for workflow stage move");
           }
 
           await client.moveTaskToWorkflowStage({
             taskId: createdTaskId,
-            workflowId: parsed.workflowId,
-            stageId: parsed.stageId,
+            workflowId: parsed.data.workflowId,
+            stageId: parsed.data.stageId,
           });
 
           const verifyTask = await client.getTask({ taskId: createdTaskId });
-          return textResult({
+          const result = {
             createResult: data,
             stageMove: {
-              workflowId: parsed.workflowId,
-              stageId: parsed.stageId,
+              workflowId: parsed.data.workflowId,
+              stageId: parsed.data.stageId,
               currentStageId: verifyTask?.task?.workflowStages?.[0]?.stageId,
             },
-          });
+          };
+          logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
+          return textResult(result);
         }
 
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_update_task": {
-        const parsed = schemas.updateTask.parse(args);
+        const parsed = schemas.updateTask.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const data = await client.updateTask(parsed);
+        const data = await client.updateTask(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_move_task": {
-        const parsed = schemas.moveTask.parse(args);
+        const parsed = schemas.moveTask.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const data = await client.moveTask(parsed);
+        const data = await client.moveTask(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_move_task_stage": {
-        const parsed = schemas.moveTaskEasy.parse(args);
+        const parsed = schemas.moveTaskEasy.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const target = resolveStageMoveTarget(parsed);
+        const target = resolveStageMoveTarget(parsed.data);
         const data = await client.moveTask({
-          taskId: parsed.taskId,
+          taskId: parsed.data.taskId,
           workflowId: target.workflowId,
           stageId: target.stageId,
         });
-        return textResult({
+        const result = {
           ...data,
-          requestedStageAlias: parsed.stage,
-        });
+          requestedStageAlias: parsed.data.stage,
+        };
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
+        return textResult(result);
       }
 
       case "teamwork_get_workflow_stages": {
-        const parsed = schemas.getWorkflowStages.parse(args);
-        const data = await client.getWorkflowStages(parsed);
+        const parsed = schemas.getWorkflowStages.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getWorkflowStages(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_get_task_comments": {
-        const parsed = schemas.getTaskComments.parse(args);
-        const data = await client.getTaskComments(parsed);
+        const parsed = schemas.getTaskComments.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getTaskComments(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_add_task_comment": {
-        const parsed = schemas.addTaskComment.parse(args);
+        const parsed = schemas.addTaskComment.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const data = await client.addTaskComment(parsed);
+        const data = await client.addTaskComment(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_get_notifications": {
-        const parsed = schemas.getNotifications.parse(args);
-        const data = await client.getNotifications(parsed);
+        const parsed = schemas.getNotifications.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
+        const data = await client.getNotifications(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_add_task_time_entry": {
-        const parsed = schemas.addTaskTimeEntry.parse(args);
+        const parsed = schemas.addTaskTimeEntry.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const data = await client.addTaskTimeEntry(parsed);
+        const data = await client.addTaskTimeEntry(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       case "teamwork_upload_file_to_task": {
-        const parsed = schemas.uploadFileToTask.parse(args);
+        const parsed = schemas.uploadFileToTask.safeParse(args);
+        if (!parsed.success) throw new ValidationError(formatValidationError(parsed.error));
         ensureWriteAllowed();
-        const data = await client.uploadFileToTask(parsed);
+        const data = await client.uploadFileToTask(parsed.data);
+        logger.logToolCall(name, args, { status: "success", duration: Date.now() - startTime });
         return textResult(data);
       }
 
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new ValidationError(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              success: false,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            null,
-            2
-          ),
-        },
-      ],
-      isError: true,
-    };
+    logger.logToolCall(name, args, { status: "error", duration: Date.now() - startTime, error });
+    return formatMCPError(error);
   }
 });
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+try {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  logger.info("Teamwork MCP server connected to stdio transport");
+} catch (error) {
+  logger.error("Failed to start Teamwork MCP server", {
+    error,
+  });
+  process.exit(1);
+}

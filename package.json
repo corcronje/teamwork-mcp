@@ -1,15 +1,17 @@
 {
   "name": "teamwork-mcp-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Production-ready MCP server for Teamwork.com task workflows, comments, time logging, and stage moves",
+  "description": "Production-ready MCP server for Teamwork.com with robust error handling, retries, and structured logging",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "check": "node --check src/*.js",
+    "test": "echo 'Run integration tests with: node scripts/integration-test.js' && exit 1",
     "task:move-stage": "node src/task-stage.js",
-    "task:create-mock": "node --input-type=module -e \"import { loadConfig } from './src/config.js'; import { TeamworkClient } from './src/teamworkClient.js'; const client = new TeamworkClient(loadConfig()); const created = await client.createTask({ projectId: 1216946, taskListId: 3691036, title: 'MOCK TASK - MCP stage move validation', description: 'Temporary mock task to validate local MCP stage movement improvements.' }); const taskId = created?.id ?? created?.task?.id ?? created?.TASKID ?? created?.taskId ?? created?.['todo-item']?.id ?? created?.todoItem?.id; console.log(JSON.stringify({ success: true, taskId, created }, null, 2));\""
+    "task:create-mock": "node --input-type=module -e \"import { loadConfig } from './src/config.js'; import { TeamworkClient } from './src/teamworkClient.js'; const client = new TeamworkClient(loadConfig()); const created = await client.createTask({ projectId: 1216946, taskListId: 3691036, title: 'MOCK TASK - MCP stage move validation', description: 'Temporary mock task to validate local MCP stage movement improvements.' }); const taskId = created?.id ?? created?.task?.id ?? created?.TASKID ?? created?.taskId ?? created?.['todo-item']?.id ?? created?.todoItem?.id; console.log(JSON.stringify({ success: true, taskId, created }, null, 2));\"",
+    "debug": "LOG_LEVEL=debug node src/server.js"
   },
   "repository": {
     "type": "git",

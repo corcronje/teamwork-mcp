@@ -1,3 +1,6 @@
+import { logger } from "./logger.js";
+import { parseTeamworkError, TimeoutError, ServerError } from "./errors.js";
+
 function toQueryString(params = {}) {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "");
   if (!entries.length) return "";
@@ -34,6 +37,8 @@ function extractTaskLists(payload) {
 export class TeamworkClient {
   constructor(config) {
     this.config = config;
+    this.requestTimeout = config.requestTimeout || 30000;
+    this.maxRetries = config.maxRetries || 3;
   }
 
   getHeaders() {
@@ -56,28 +61,109 @@ export class TeamworkClient {
     };
   }
 
+  /**
+   * Check if an error is retryable based on status code
+   */
+  _isRetryable(status) {
+    // Retryable: timeouts, rate limits, and 5xx errors
+    return status === 408 || status === 429 || (status >= 500 && status < 600);
+  }
+
+  /**
+   * Exponential backoff retry logic
+   */
+  async _retryWithBackoff(fn, attempt = 0) {
+    try {
+      return await fn();
+    } catch (error) {
+      // Check if retryable
+      const isRetryable = error instanceof TimeoutError || (error.status && this._isRetryable(error.status));
+
+      if (!isRetryable || attempt >= this.maxRetries) {
+        throw error;
+      }
+
+      // Calculate backoff: 1s, 2s, 4s, 8s with jitter
+      const baseDelay = Math.pow(2, attempt) * 1000;
+      const jitter = Math.random() * baseDelay * 0.1; // 0-10% jitter
+      const delayMs = baseDelay + jitter;
+
+      logger.warn(`Request failed (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${delayMs.toFixed(0)}ms`, {
+        attempt,
+        error: error.message,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return this._retryWithBackoff(fn, attempt + 1);
+    }
+  }
+
+  /**
+   * Make HTTP request with timeout, retries, and error handling
+   */
   async request(method, path, { query, body } = {}) {
     const url = `${this.config.apiBase}${path}${toQueryString(query)}`;
+    const startTime = Date.now();
 
-    const response = await fetch(url, {
-      method,
-      headers: this.getHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const makeRequest = async () => {
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), this.requestTimeout);
 
-    const text = await response.text();
-    let data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text };
-    }
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: this.getHeaders(),
+          body: body ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
 
-    if (!response.ok) {
-      throw new Error(`Teamwork API ${response.status} ${response.statusText}: ${JSON.stringify(data)}`);
-    }
+        const text = await response.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { raw: text };
+        }
 
-    return data;
+        const duration = Date.now() - startTime;
+        logger.logRequest(method, url, { status: response.status, duration });
+
+        if (!response.ok) {
+          const error = parseTeamworkError(response, data);
+          throw error;
+        }
+
+        return data;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        // Handle AbortError from timeout
+        if (error.name === "AbortError") {
+          const timeoutError = new TimeoutError(`Request timeout after ${this.requestTimeout}ms: ${method} ${path}`, {
+            context: { method, path, timeout: this.requestTimeout },
+          });
+          logger.logRequest(method, url, { duration, error: timeoutError });
+          throw timeoutError;
+        }
+
+        // Re-throw already parsed errors
+        if (error.code !== undefined) {
+          logger.logRequest(method, url, { status: error.status, duration, error });
+          throw error;
+        }
+
+        // Wrap unexpected errors
+        const serverError = new ServerError(`Unexpected request error: ${error.message}`, {
+          context: { method, path, error: error.message },
+        });
+        logger.logRequest(method, url, { duration, error: serverError });
+        throw serverError;
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+    };
+
+    return this._retryWithBackoff(makeRequest);
   }
 
   getLegacyApiBase() {
@@ -109,27 +195,68 @@ export class TeamworkClient {
 
   async requestLegacy(method, path, { query, body, contentType = "application/json", accept = "application/json" } = {}) {
     const url = `${this.getLegacyApiBase()}${path}${toQueryString(query)}`;
-    const headers = this.getLegacyHeaders({ contentType, accept });
+    const startTime = Date.now();
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
-    });
+    const makeRequest = async () => {
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), this.requestTimeout);
 
-    const text = await response.text();
-    let data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text };
-    }
+      try {
+        const headers = this.getLegacyHeaders({ contentType, accept });
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: body ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+          signal: controller.signal,
+        });
 
-    if (!response.ok) {
-      throw new Error(`Teamwork legacy API ${response.status} ${response.statusText}: ${JSON.stringify(data)}`);
-    }
+        const text = await response.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { raw: text };
+        }
 
-    return data;
+        const duration = Date.now() - startTime;
+        logger.logRequest(method, url, { status: response.status, duration });
+
+        if (!response.ok) {
+          const error = parseTeamworkError(response, data);
+          throw error;
+        }
+
+        return data;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        // Handle AbortError from timeout
+        if (error.name === "AbortError") {
+          const timeoutError = new TimeoutError(`Request timeout after ${this.requestTimeout}ms: ${method} ${path}`, {
+            context: { method, path, timeout: this.requestTimeout },
+          });
+          logger.logRequest(method, url, { duration, error: timeoutError });
+          throw timeoutError;
+        }
+
+        // Re-throw already parsed errors
+        if (error.code !== undefined) {
+          logger.logRequest(method, url, { status: error.status, duration, error });
+          throw error;
+        }
+
+        // Wrap unexpected errors
+        const serverError = new ServerError(`Unexpected request error: ${error.message}`, {
+          context: { method, path, error: error.message },
+        });
+        logger.logRequest(method, url, { duration, error: serverError });
+        throw serverError;
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+    };
+
+    return this._retryWithBackoff(makeRequest);
   }
 
   getMyTasks({ page = 1, pageSize = 50, includeCompleted = false } = {}) {

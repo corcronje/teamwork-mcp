@@ -1,0 +1,14 @@
+{
+  "baseUrl": "https://your-org.teamwork.com",
+  "apiVersion": "v3",
+  "token": "your_teamwork_api_token_here",
+  "authMode": "basic_token_x",
+  "readOnly": true,
+  "allowedProjectIds": [
+    "1234567",
+    "2345678"
+  ],
+  "requestTimeout": 30000,
+  "maxRetries": 3,
+  "logLevel": "info"
+}
