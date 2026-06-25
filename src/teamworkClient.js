@@ -525,25 +525,38 @@ export class TeamworkClient {
     }
   }
 
-  addTaskTimeEntry({ taskId, description = "", date, time, hours = 0, minutes = 0, isbillable = false, personId } = {}) {
+  async addTaskTimeEntry({ taskId, description = "", date, time, hours = 0, minutes = 0, isbillable = false, personId } = {}) {
     const timeEntry = {
       description,
       date,
-      time,
       hours,
       minutes,
       isbillable,
     };
 
+    // Only include time if provided (optional field)
+    if (time) {
+      timeEntry.time = time;
+    }
+
     if (personId !== undefined && personId !== null) {
       timeEntry["person-id"] = personId;
     }
 
-    return this.requestLegacy("POST", `/tasks/${taskId}/time_entries.json`, {
-      body: {
-        "time-entry": timeEntry,
-      },
-    });
+    try {
+      return await this.request("POST", `/tasks/${taskId}/time_entries.json`, {
+        body: {
+          "time-entry": timeEntry,
+        },
+      });
+    } catch (error) {
+      // Fallback to v1 API
+      return await this.requestLegacy("POST", `/tasks/${taskId}/time_entries.json`, {
+        body: {
+          "time-entry": timeEntry,
+        },
+      });
+    }
   }
 
   async uploadFileToTask({ taskId, filePath, categoryId = 0 } = {}) {
