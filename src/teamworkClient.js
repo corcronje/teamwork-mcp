@@ -526,37 +526,63 @@ export class TeamworkClient {
   }
 
   async addTaskTimeEntry({ taskId, description = "", date, time, hours = 0, minutes = 0, isbillable = false, personId } = {}) {
-    const timeEntry = {
-      description,
-      date,
-      hours,
-      minutes,
-      isbillable,
+    // Fetch task to get project ID (v1 API returns project-id)
+    let projectId;
+    try {
+      const taskDetailsV1 = await this.requestLegacy("GET", `/tasks/${taskId}.json`);
+      projectId = taskDetailsV1?.["todo-item"]?.["project-id"];
+      if (!projectId) {
+        throw new Error("Unable to determine project ID from task details");
+      }
+    } catch (err) {
+      throw new Error(`Cannot add time entry: unable to fetch task ${taskId} to determine project context: ${err.message}`);
+    }
+
+    // Build time entry data with hyphenated keys (required by Teamwork v1 API)
+    const timeEntryData = {
+      "logged-date": date,
+      "task-id": String(taskId),
+      hours: Number(hours),
+      minutes: Number(minutes),
+      isbillable: Boolean(isbillable),
     };
 
-    // Only include time if provided (optional field)
+    if (description) {
+      timeEntryData.description = description;
+    }
+
     if (time) {
-      timeEntry.time = time;
+      timeEntryData.time = time;
     }
 
     if (personId !== undefined && personId !== null) {
-      timeEntry["person-id"] = personId;
+      timeEntryData["user-id"] = String(personId);
     }
 
-    try {
-      return await this.request("POST", `/tasks/${taskId}/time_entries.json`, {
-        body: {
-          "time-entry": timeEntry,
-        },
-      });
-    } catch (error) {
-      // Fallback to v1 API
-      return await this.requestLegacy("POST", `/tasks/${taskId}/time_entries.json`, {
-        body: {
-          "time-entry": timeEntry,
-        },
-      });
+    const body = {
+      "time-entry": timeEntryData
+    };
+
+    // Try multiple endpoints for time entry creation
+    const endpoints = [
+      `/projects/${projectId}/timelogs.json`,
+      `/projects/${projectId}/time_entries.json`,
+      `/tasks/${taskId}/time_entries.json`,
+      `/timelogs.json`,
+    ];
+
+    let lastError;
+    for (const endpoint of endpoints) {
+      try {
+        return await this.requestLegacy("POST", endpoint, { body });
+      } catch (err) {
+        lastError = err;
+        // Continue to next endpoint
+      }
     }
+
+    // If all endpoints failed, throw the last error
+    throw lastError || new Error("Unable to add time entry: no valid endpoint found");
   }
 
   async uploadFileToTask({ taskId, filePath, categoryId = 0 } = {}) {
