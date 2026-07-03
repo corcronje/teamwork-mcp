@@ -13,8 +13,8 @@ Provides safe, reusable tools for task management, workflow automation, comments
 - Move tasks by workflow stage IDs
 - Move tasks by friendly stage aliases (`selected`, `in_progress`, `qa_ready`)
 - Read and add task comments
+- **Add task time entries** (with automatic project context resolution)
 - List notifications
-- Add task time entries
 - Upload local files to tasks
 - List workflow stages
 
@@ -237,6 +237,12 @@ All errors follow the MCP spec format:
   }
 }
 ```
+
+## Documentation
+
+- [Time Entry Implementation Guide](docs/TIME_ENTRY_IMPLEMENTATION.md) - Details on creating task time entries
+- [Architecture Guide](ARCHITECTURE.md) - System design and module overview
+- [VS Code Setup Guide](CLAUDE_CODE_SETUP.md) - Configure VS Code to use local MCP
 
 ## Production Release Notes
 
