@@ -565,9 +565,9 @@ export class TeamworkClient {
 
     // Try multiple endpoints for time entry creation
     const endpoints = [
-      `/projects/${projectId}/timelogs.json`,
-      `/projects/${projectId}/time_entries.json`,
       `/tasks/${taskId}/time_entries.json`,
+      `/projects/${projectId}/time_entries.json`,
+      `/projects/${projectId}/timelogs.json`,
       `/timelogs.json`,
     ];
 
