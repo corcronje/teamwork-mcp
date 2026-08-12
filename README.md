@@ -98,27 +98,34 @@ Sensitive data policy:
 
 ### Adding Time Entries
 
-Time entries require a **YYYYMMDD date format** (8 digits: year, month, day). The client automatically converts YYYY-MM-DD format to YYYYMMDD.
+Time entries require:
+- **Date format**: YYYYMMDD (auto-converts from YYYY-MM-DD)
+- **Time format**: HH:MM in 24-hour format (optional, defaults to 00:00 if omitted)
+- **Hours & Minutes**: Duration of work logged
+- **Description**: Work description
 
 ```javascript
-// Both formats work:
+// Complete example with time of day:
 await client.addTaskTimeEntry({
   taskId: '48708771',
-  date: '20260812',        // YYYYMMDD format
+  date: '2026-08-12',      // or '20260812' - both work
+  time: '14:30',           // 2:30 PM in 24-hour format (required for accurate logging)
   hours: 1,
   minutes: 30,
   description: 'Work completed'
 });
 
-// Or use YYYY-MM-DD (auto-converts):
+// Minimal example (defaults to 00:00):
 await client.addTaskTimeEntry({
   taskId: '48708771',
-  date: '2026-08-12',      // YYYY-MM-DD format
+  date: '2026-08-12',
   hours: 1,
   minutes: 30,
   description: 'Work completed'
 });
 ```
+
+**Important**: Always include the `time` field in HH:MM format (24-hour) to log entries at the correct time of day. Without it, entries are logged at midnight (00:00).
 
 ## VS Code MCP Registration
 
