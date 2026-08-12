@@ -261,13 +261,13 @@ for (const entry of timeParams) {
 
 ## API Strategy
 
-This server uses the latest Teamwork API v3 exclusively for all task management operations:
+This server uses the latest Teamwork API v3 for most operations, with v1 fallback for specific endpoints:
 
 - **Task operations (CRUD)**: `/projects/api/v3/tasklists/{tasklistId}/tasks.json`
 - **Workflow operations**: `/projects/api/v3` (reads, updates, moves)
-- **Time entries**: `/projects/api/v1` (v3 support varies by account)
-- **File attachments**: `/projects/api/v1` (tested v3 compatibility)
-- **Comments**: `/projects/api/v3/tasks/{taskId}/comments.json`
+- **Task Comments**: `/projects/api/v1/tasks/{taskId}/comments.json` (v1 only)
+- **Time entries**: `/projects/api/v1/tasks/{taskId}/time_entries.json` (v1 required)
+- **File attachments**: `/projects/api/v1` (tested with v3 compatibility)
 
 All task creation goes through v3 API using the tasklistId endpoint for proper field handling and consistency.
 
