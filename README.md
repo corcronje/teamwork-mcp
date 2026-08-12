@@ -13,7 +13,7 @@ Provides safe, reusable tools for task management, workflow automation, comments
 - Move tasks by workflow stage IDs
 - Move tasks by friendly stage aliases (`selected`, `in_progress`, `qa_ready`)
 - Read and add task comments
-- **Add task time entries** (with automatic project context resolution)
+- **Add task time entries** (date format: YYYYMMDD or YYYY-MM-DD, auto-converts to YYYYMMDD)
 - List notifications
 - Upload local files to tasks
 - List workflow stages
@@ -94,6 +94,32 @@ Sensitive data policy:
 - Keep tokens only in runtime env files or secret stores.
 - Rotate Teamwork tokens if exposed.
 
+## Time Entry Logging
+
+### Adding Time Entries
+
+Time entries require a **YYYYMMDD date format** (8 digits: year, month, day). The client automatically converts YYYY-MM-DD format to YYYYMMDD.
+
+```javascript
+// Both formats work:
+await client.addTaskTimeEntry({
+  taskId: '48708771',
+  date: '20260812',        // YYYYMMDD format
+  hours: 1,
+  minutes: 30,
+  description: 'Work completed'
+});
+
+// Or use YYYY-MM-DD (auto-converts):
+await client.addTaskTimeEntry({
+  taskId: '48708771',
+  date: '2026-08-12',      // YYYY-MM-DD format
+  hours: 1,
+  minutes: 30,
+  description: 'Work completed'
+});
+```
+
 ## VS Code MCP Registration
 
 Create or edit your VS Code user MCP config file:
@@ -143,29 +169,100 @@ npm run task:create-mock
 npm run task:move-stage -- --taskId <id> --stage <selected|in_progress|qa_ready>
 ```
 
-## Tools Exposed
+## Quick Start with Task Class
 
-- `teamwork_get_my_tasks`
-- `teamwork_get_project_tasks`
-- `teamwork_get_task_detail`
-- `teamwork_create_task`
-- `teamwork_update_task`
-- `teamwork_move_task`
-- `teamwork_move_task_stage`
-- `teamwork_get_workflow_stages`
-- `teamwork_get_task_comments`
-- `teamwork_add_task_comment`
-- `teamwork_get_notifications`
-- `teamwork_add_task_time_entry`
-- `teamwork_upload_file_to_task`
+For simplified task creation with proper date/time handling:
+
+```javascript
+import { Task, TaskPriority } from './src/Task.js';
+import { TeamworkClient } from './src/teamworkClient.js';
+import { loadConfig } from './src/config.js';
+
+const config = loadConfig();
+const client = new TeamworkClient(config);
+
+// Create and configure task
+const task = new Task('938241'); // project ID
+task.title = "My Task Title";
+task.description = "Task description";
+task.assigneeUserId = 108693;
+task.priority = TaskPriority.HIGH;
+task.dueDate = new Date('2026-08-31'); // Auto-formatted to YYYY-MM-DD
+task.stageId = 182969;
+
+// Create task
+const result = await client.createTask(task.toParams());
+task.id = result.task.id;
+
+// Add time entry
+task.addTimeEntry({
+  date: '2026-08-11',
+  hours: 2,
+  minutes: 30,
+  description: 'Implementation work',
+  billable: true
+});
+
+const timeParams = task.getTimeEntryParams();
+for (const entry of timeParams) {
+  await client.addTaskTimeEntry(entry);
+}
+```
+
+See [Task Class Guide](docs/TASK_CLASS.md) for full documentation.
+
+## Tools Exposed (27 methods)
+
+### Task Management (9)
+- `teamwork_create_task` - Create new task (v3 API)
+- `teamwork_update_task` - Update task properties
+- `teamwork_delete_task` - Delete task
+- `teamwork_get_task_detail` - Get single task
+- `teamwork_get_my_tasks` - Get assigned tasks
+- `teamwork_get_project_tasks` - Get project tasks
+- `teamwork_list_all_tasks` - List with pagination
+- `teamwork_complete_task` - Mark task complete
+- `teamwork_upload_file_to_task` - Attach file to task
+
+### Task Filtering & Querying (8)
+- `teamwork_filter_tasks_by_assignee` - Filter by user
+- `teamwork_filter_tasks_by_priority` - Filter by priority level
+- `teamwork_filter_tasks_by_status` - Filter by status
+- `teamwork_filter_tasks_by_date_range` - Filter by due date range
+- `teamwork_filter_tasks_without_due_date` - Find unscheduled tasks
+- `teamwork_filter_active_tasks` - Get incomplete tasks
+- `teamwork_filter_completed_tasks` - Get finished tasks
+- `teamwork_search_tasks` - Full-text search
+
+### Comment Management (4)
+- `teamwork_get_task_comments` - List task comments
+- `teamwork_add_task_comment` - Add comment
+- `teamwork_update_task_comment` - Update comment
+- `teamwork_delete_task_comment` - Delete comment
+
+### Time Entry Management (3)
+- `teamwork_add_task_time_entry` - Log time
+- `teamwork_get_task_time_entries` - List time entries
+- `teamwork_delete_time_entry` - Remove time entry
+
+### Workflow & Organization (2)
+- `teamwork_get_workflow_stages` - Get pipeline stages
+- `teamwork_get_project_task_lists` - Get task lists
+
+### Notifications (1)
+- `teamwork_get_notifications` - Get user notifications
 
 ## API Strategy
 
-This server uses a pragmatic mixed-endpoint strategy because Teamwork capability can vary by account:
+This server uses the latest Teamwork API v3 exclusively for all task management operations:
 
-- Primary task/workflow operations: `/projects/api/v3`
-- Time entries and file attach flow: `/projects/api/v1`
-- Comment fallback for older accounts: `/projects/api/v1/tasks/{taskId}/comments.json`
+- **Task operations (CRUD)**: `/projects/api/v3/tasklists/{tasklistId}/tasks.json`
+- **Workflow operations**: `/projects/api/v3` (reads, updates, moves)
+- **Time entries**: `/projects/api/v1` (v3 support varies by account)
+- **File attachments**: `/projects/api/v1` (tested v3 compatibility)
+- **Comments**: `/projects/api/v3/tasks/{taskId}/comments.json`
+
+All task creation goes through v3 API using the tasklistId endpoint for proper field handling and consistency.
 
 ## Troubleshooting & Logs
 
@@ -240,6 +337,8 @@ All errors follow the MCP spec format:
 
 ## Documentation
 
+- [Task Class Guide](docs/TASK_CLASS.md) - Helper class for task creation with date/time handling, time entries, and comments
+- [TaskQueue Guide](docs/TASK_QUEUE.md) - Task prioritization, lane management, and work queue organization
 - [Time Entry Implementation Guide](docs/TIME_ENTRY_IMPLEMENTATION.md) - Details on creating task time entries
 - [Architecture Guide](ARCHITECTURE.md) - System design and module overview
 - [VS Code Setup Guide](CLAUDE_CODE_SETUP.md) - Configure VS Code to use local MCP
