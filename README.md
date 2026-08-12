@@ -288,6 +288,22 @@ Logs include:
 - `context` - Structured context data
 - `stack` - Stack trace for errors
 
+### Quick Troubleshooting
+
+**"Unknown error" on comment/time entry operations:**
+- Verify task ID format (use numeric IDs when possible)
+- Check that Basic auth is configured: `TEAMWORK_AUTH_MODE=basic_token_x`
+- Confirm date formats are correct (YYYYMMDD for dates, HH:MM for times)
+- Review v1 vs v3 API strategy in this README
+
+**Timeout errors:**
+- Increase `TEAMWORK_REQUEST_TIMEOUT` (default 30s)
+- Check Teamwork API status: https://status.teamwork.com
+
+**404 Not Found:**
+- Verify IDs are correct (use actual database IDs)
+- Ensure resource exists before attempting operations
+
 ### Common Error Codes
 
 | Code | HTTP Status | Meaning | Action |
@@ -299,6 +315,11 @@ Logs include:
 | `RATE_LIMIT_EXCEEDED` | 429 | Too many requests | Server will auto-retry with backoff |
 | `REQUEST_TIMEOUT` | 504 | Request took too long | Increase `TEAMWORK_REQUEST_TIMEOUT` or check network |
 | `INTERNAL_ERROR` | 500+ | Unexpected server error | Check logs and Teamwork API status |
+
+### Known Limitations
+
+- **Task Comment Deletion**: The v1 API comment deletion endpoint may return 400 errors. Workaround: Delete comments manually via Teamwork web UI.
+- **Task IDs**: v1 API uses numeric IDs (e.g., `34436576`), v3 API may use string IDs (e.g., `48708771`). The client handles both formats automatically.
 
 ### Performance & Optimization
 
