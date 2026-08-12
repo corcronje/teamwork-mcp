@@ -188,26 +188,26 @@ import { loadConfig } from './src/config.js';
 const config = loadConfig();
 const client = new TeamworkClient(config);
 
-// Create and configure task
-const task = new Task('938241'); // project ID
+// Create and configure task (CTC Africa project)
+const task = new Task('938241'); // Project ID
 task.title = "My Task Title";
 task.description = "Task description";
-task.assigneeUserId = 108693;
+task.assigneeUserId = 108693; // Cor Cronje
 task.priority = TaskPriority.HIGH;
 task.dueDate = new Date('2026-08-31'); // Auto-formatted to YYYY-MM-DD
-task.stageId = 182969;
+task.stageId = 182969; // In Progress
 
 // Create task
 const result = await client.createTask(task.toParams());
 task.id = result.task.id;
 
-// Add time entry
+// Add time entry (don't forget the time field in HH:MM!)
 task.addTimeEntry({
   date: '2026-08-11',
+  time: '14:30',  // IMPORTANT: always include time in HH:MM format
   hours: 2,
   minutes: 30,
-  description: 'Implementation work',
-  billable: true
+  description: 'Implementation work'
 });
 
 const timeParams = task.getTimeEntryParams();
@@ -216,7 +216,7 @@ for (const entry of timeParams) {
 }
 ```
 
-See [Task Class Guide](docs/TASK_CLASS.md) for full documentation.
+**See [Task Class Guide](docs/TASK_CLASS.md)** for quick reference (IDs, stage IDs, and copy-paste examples).
 
 ## Tools Exposed (27 methods)
 

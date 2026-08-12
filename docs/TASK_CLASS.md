@@ -10,6 +10,34 @@ The Task class simplifies task creation by:
 - Supporting time entry creation and management
 - Providing chainable methods for fluent task building
 
+## Quick Reference (Copy-Paste Ready)
+
+**CTC Africa Project:**
+- Project ID: `938241`
+- Workflow ID: `43608`
+
+**Assignee (Cor Cronje):**
+- User ID: `108693`
+
+**Common Stage IDs:**
+- `182968` - Selected
+- `182969` - In Progress
+- `182970` - QA Ready
+
+**One-liner to create a task:**
+```javascript
+const task = new Task('938241');
+task.title = "Your task title here";
+task.description = "Description";
+task.assigneeUserId = 108693;
+task.priority = TaskPriority.HIGH;
+task.dueDate = '2026-08-15';
+task.stageId = 182969;
+const params = task.toParams();
+const result = await client.createTask(params);
+console.log(result.task.id); // Use this ID for time entries
+```
+
 ## Basic Usage
 
 ### Creating a Task
