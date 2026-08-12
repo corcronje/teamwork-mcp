@@ -444,35 +444,21 @@ export class TeamworkClient {
   }
 
   async getTaskComments({ taskId, page = 1, pageSize = 50 } = {}) {
-    try {
-      return await this.request("GET", `/tasks/${taskId}/comments.json`, {
-        query: { page, pageSize },
-      });
-    } catch {
-      return this.requestLegacy("GET", `/tasks/${taskId}/comments.json`, {
-        query: { page, pageSize },
-      });
-    }
+    // Comments use v1 API directly
+    return this.requestLegacy("GET", `/tasks/${taskId}/comments.json`, {
+      query: { page, pageSize },
+    });
   }
 
   async addTaskComment({ taskId, body } = {}) {
-    try {
-      return await this.request("POST", `/tasks/${taskId}/comments.json`, {
-        body: {
-          comment: {
-            body,
-          },
+    // Comments use v1 API directly
+    return this.requestLegacy("POST", `/tasks/${taskId}/comments.json`, {
+      body: {
+        comment: {
+          body,
         },
-      });
-    } catch {
-      return this.requestLegacy("POST", `/tasks/${taskId}/comments.json`, {
-        body: {
-          comment: {
-            body,
-          },
-        },
-      });
-    }
+      },
+    });
   }
 
   async addTaskTimeEntry({ taskId, description = "", date, time, hours = 0, minutes = 0, isbillable = false, personId } = {}) {
