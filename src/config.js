@@ -6,7 +6,7 @@ const envSchema = z.object({
   TEAMWORK_BASE_URL: z.string().url(),
   TEAMWORK_API_VERSION: z.string().default("v3"),
   TEAMWORK_API_TOKEN: z.string().min(1),
-  TEAMWORK_AUTH_MODE: z.enum(["bearer", "basic_token_x"]).default("bearer"),
+  TEAMWORK_AUTH_MODE: z.enum(["bearer", "basic_token_x"]).optional(),
   TEAMWORK_READ_ONLY: z
     .string()
     .optional()
@@ -63,7 +63,9 @@ function mergeConfigs(envConfig, fileConfig = {}) {
     baseUrl: envConfig.TEAMWORK_BASE_URL || fileConfig.baseUrl,
     apiVersion: envConfig.TEAMWORK_API_VERSION || fileConfig.apiVersion || "v3",
     token: envConfig.TEAMWORK_API_TOKEN || fileConfig.token,
-    authMode: envConfig.TEAMWORK_AUTH_MODE || fileConfig.authMode || "bearer",
+    // Teamwork API keys authenticate with HTTP Basic "token:x" (Bearer returns 401 for them);
+    // "bearer" is only for OAuth access tokens.
+    authMode: envConfig.TEAMWORK_AUTH_MODE || fileConfig.authMode || "basic_token_x",
     readOnly: envConfig.TEAMWORK_READ_ONLY ?? fileConfig.readOnly ?? false,
     allowedProjectIds: envConfig.TEAMWORK_ALLOWED_PROJECT_IDS
       ? envConfig.TEAMWORK_ALLOWED_PROJECT_IDS.split(",").map((x) => x.trim()).filter(Boolean)
