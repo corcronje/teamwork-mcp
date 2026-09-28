@@ -3,14 +3,15 @@ import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 const envSchema = z.object({
-  TEAMWORK_BASE_URL: z.string().url(),
-  TEAMWORK_API_VERSION: z.string().default("v3"),
-  TEAMWORK_API_TOKEN: z.string().min(1),
+  TEAMWORK_BASE_URL: z.string().url().optional(),
+  TEAMWORK_API_VERSION: z.string().optional(),
+  TEAMWORK_API_TOKEN: z.string().min(1).optional(),
   TEAMWORK_AUTH_MODE: z.enum(["bearer", "basic_token_x"]).optional(),
+  // Unset -> undefined, so a config file's readOnly can apply (default false).
   TEAMWORK_READ_ONLY: z
     .string()
     .optional()
-    .transform((v) => (v || "false").toLowerCase() === "true"),
+    .transform((v) => (v === undefined || v === "" ? undefined : v.toLowerCase() === "true")),
   TEAMWORK_ALLOWED_PROJECT_IDS: z.string().optional(),
   TEAMWORK_REQUEST_TIMEOUT: z.string().optional().transform((v) => (v ? parseInt(v, 10) : undefined)),
   TEAMWORK_MAX_RETRIES: z.string().optional().transform((v) => (v !== undefined && v !== "" ? parseInt(v, 10) : undefined)),

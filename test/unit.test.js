@@ -313,3 +313,42 @@ describe("TaskQueue (v3 and summary task shapes)", async () => {
     assert.deepEqual(TaskQueue.filterWithoutDueDate(tasks).map((t) => t.id), [2]);
   });
 });
+
+describe("config precedence", async () => {
+  const { loadConfig } = await import("../src/config.js");
+  const keys = ["TEAMWORK_BASE_URL", "TEAMWORK_API_TOKEN", "TEAMWORK_AUTH_MODE", "TEAMWORK_API_VERSION", "TEAMWORK_READ_ONLY", "TEAMWORK_CONFIG_FILE", "TEAMWORK_ALLOWED_PROJECT_IDS", "TEAMWORK_UPLOAD_ROOTS", "TEAMWORK_REQUEST_TIMEOUT", "TEAMWORK_MAX_RETRIES"];
+  function withEnv(vars, fn) {
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) delete process.env[k];
+    Object.assign(process.env, vars);
+    try {
+      return fn();
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  }
+  const example = new URL("../mcp.config.example.json", import.meta.url).pathname;
+
+  it("defaults: basic auth, writable, v3", () => {
+    const c = withEnv({ TEAMWORK_BASE_URL: "https://x.teamwork.com", TEAMWORK_API_TOKEN: "t" }, loadConfig);
+    assert.equal(c.authMode, "basic_token_x");
+    assert.equal(c.readOnly, false);
+    assert.equal(c.apiBase, "https://x.teamwork.com/projects/api/v3");
+  });
+  it("a config file alone is enough, and its readOnly applies", () => {
+    const c = withEnv({ TEAMWORK_CONFIG_FILE: example }, loadConfig);
+    assert.equal(c.readOnly, true);
+    assert.deepEqual(c.allowedProjectIds, ["1234567", "2345678"]);
+  });
+  it("env vars override the config file", () => {
+    const c = withEnv({ TEAMWORK_CONFIG_FILE: example, TEAMWORK_READ_ONLY: "false", TEAMWORK_MAX_RETRIES: "0" }, loadConfig);
+    assert.equal(c.readOnly, false);
+    assert.equal(c.maxRetries, 0);
+  });
+  it("fails clearly without a base URL", () => {
+    assert.throws(() => withEnv({}, loadConfig), /TEAMWORK_BASE_URL/);
+  });
+});
