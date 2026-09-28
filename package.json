@@ -8,9 +8,10 @@
   "scripts": {
     "start": "node src/server.js",
     "check": "node --check src/*.js test/*.js",
-    "test": "node --test test/unit.test.js test/live.test.js",
+    "test": "node --test test/unit.test.js",
     "test:unit": "node --test test/unit.test.js",
     "test:live": "node --test test/live.test.js",
+    "test:all": "node --test test/unit.test.js test/live.test.js",
     "task:move-stage": "node src/task-stage.js",
     "debug": "LOG_LEVEL=debug node src/server.js"
   },

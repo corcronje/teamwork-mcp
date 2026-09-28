@@ -45,7 +45,7 @@ Requires Node.js 18+. Use the absolute path of `src/server.js` in every config b
 | `TEAMWORK_API_TOKEN` | yes | | Teamwork API key (Profile > Edit my details > API & Mobile) |
 | `TEAMWORK_AUTH_MODE` | no | `basic_token_x` | `basic_token_x` for Teamwork API keys (Bearer returns 401 for them); `bearer` only for OAuth access tokens |
 | `TEAMWORK_API_VERSION` | no | `v3` | Leave as `v3` |
-| `TEAMWORK_READ_ONLY` | no | `false` | `true` blocks every write tool |
+| `TEAMWORK_READ_ONLY` | no | `true` | `false` enables write tools; verify read tools first |
 | `TEAMWORK_ALLOWED_PROJECT_IDS` | no | (any) | Comma-separated project ids that write tools may touch. Writes whose project cannot be determined are refused. |
 | `TEAMWORK_UPLOAD_ROOTS` | no | (any) | Comma-separated directories. If set, the attach tools only upload files inside them. |
 | `TEAMWORK_REQUEST_TIMEOUT` | no | `30000` | ms |
@@ -134,7 +134,7 @@ is **one** config for both. The key is `servers`, and every entry needs `"type":
         "TEAMWORK_BASE_URL": "https://your-site.teamwork.com",
         "TEAMWORK_API_TOKEN": "${input:teamwork-token}",
         "TEAMWORK_AUTH_MODE": "basic_token_x",
-        "TEAMWORK_READ_ONLY": "false",
+        "TEAMWORK_READ_ONLY": "true",
         "TEAMWORK_ALLOWED_PROJECT_IDS": ""
       }
     }
@@ -146,6 +146,9 @@ is **one** config for both. The key is `servers`, and every entry needs `"type":
 file safe to commit as `.vscode/mcp.json`. In a private user-level `mcp.json` you can
 put the token inline instead. VS Code also accepts `"envFile": "/absolute/path/to/.env"`
 on a stdio server to load variables from a file.
+
+Set `TEAMWORK_READ_ONLY` to `"false"` only after you've verified the read tools work as
+expected — it's on (blocking every write tool) by default.
 
 After changing the file or updating this repo, restart the server: **MCP: List Servers**
 > teamwork > Restart. In Copilot Chat, switch to **Agent** mode and open the tools picker

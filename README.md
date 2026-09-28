@@ -127,7 +127,7 @@ All configuration is environment variables. The full table is in
 | `TEAMWORK_BASE_URL` | (required) | e.g. `https://your-site.teamwork.com` |
 | `TEAMWORK_API_TOKEN` | (required) | Teamwork API key |
 | `TEAMWORK_AUTH_MODE` | `basic_token_x` | `bearer` only for OAuth access tokens |
-| `TEAMWORK_READ_ONLY` | `false` | `true` blocks all write tools |
+| `TEAMWORK_READ_ONLY` | `true` | `false` enables write tools; verify read tools first |
 | `TEAMWORK_ALLOWED_PROJECT_IDS` | (any) | Comma-separated project ids writes may touch |
 | `TEAMWORK_UPLOAD_ROOTS` | (any) | Comma-separated directories uploads must come from |
 | `TEAMWORK_REQUEST_TIMEOUT` / `TEAMWORK_MAX_RETRIES` | `30000` / `3` | |
@@ -136,7 +136,7 @@ All configuration is environment variables. The full table is in
 
 ## Safety
 
-- **Read-only mode**: `TEAMWORK_READ_ONLY=true` blocks every write tool. Tool descriptions say so, so agents know.
+- **Read-only mode**: on by default. `TEAMWORK_READ_ONLY=true` (the default) blocks every write tool; set it to `false` explicitly once you've verified read tools first. Tool descriptions say so, so agents know.
 - **Project allowlist**: with `TEAMWORK_ALLOWED_PROJECT_IDS` set, every write tool resolves the project it would touch (from the task, task list, comment, time entry or file id) and refuses anything outside the list. If the project cannot be determined, the write is refused. Setting this per repo or agent is the simplest way to keep several concurrent agents in their own projects.
 - **Upload roots**: `TEAMWORK_UPLOAD_ROOTS` stops agents uploading arbitrary local files (e.g. from `~/.ssh`).
 - **No duplicate writes**: POSTs (new comments, time entries, tasks) are never retried on 5xx/timeouts, because the server may already have applied them. Reads and idempotent writes retry with backoff; 429s retry for any verb.

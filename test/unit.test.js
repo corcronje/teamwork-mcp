@@ -332,10 +332,10 @@ describe("config precedence", async () => {
   }
   const example = new URL("../mcp.config.example.json", import.meta.url).pathname;
 
-  it("defaults: basic auth, writable, v3", () => {
+  it("defaults: basic auth, read-only, v3", () => {
     const c = withEnv({ TEAMWORK_BASE_URL: "https://x.teamwork.com", TEAMWORK_API_TOKEN: "t" }, loadConfig);
     assert.equal(c.authMode, "basic_token_x");
-    assert.equal(c.readOnly, false);
+    assert.equal(c.readOnly, true);
     assert.equal(c.apiBase, "https://x.teamwork.com/projects/api/v3");
   });
   it("a config file alone is enough, and its readOnly applies", () => {
