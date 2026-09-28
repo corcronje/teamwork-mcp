@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 const envSchema = z.object({
@@ -12,8 +12,9 @@ const envSchema = z.object({
     .optional()
     .transform((v) => (v || "false").toLowerCase() === "true"),
   TEAMWORK_ALLOWED_PROJECT_IDS: z.string().optional(),
-  TEAMWORK_REQUEST_TIMEOUT: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 30000)),
-  TEAMWORK_MAX_RETRIES: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 3)),
+  TEAMWORK_REQUEST_TIMEOUT: z.string().optional().transform((v) => (v ? parseInt(v, 10) : undefined)),
+  TEAMWORK_MAX_RETRIES: z.string().optional().transform((v) => (v !== undefined && v !== "" ? parseInt(v, 10) : undefined)),
+  TEAMWORK_UPLOAD_ROOTS: z.string().optional(),
   TEAMWORK_CONFIG_FILE: z.string().optional(),
   LOG_LEVEL: z.string().optional(),
 });
@@ -27,6 +28,7 @@ const configFileSchema = z.object({
   allowedProjectIds: z.array(z.string()).optional(),
   requestTimeout: z.number().positive().optional(),
   maxRetries: z.number().nonnegative().optional(),
+  uploadRoots: z.array(z.string()).optional(),
   logLevel: z.string().optional(),
 });
 
@@ -68,6 +70,10 @@ function mergeConfigs(envConfig, fileConfig = {}) {
       : fileConfig.allowedProjectIds || [],
     requestTimeout: envConfig.TEAMWORK_REQUEST_TIMEOUT ?? fileConfig.requestTimeout ?? 30000,
     maxRetries: envConfig.TEAMWORK_MAX_RETRIES ?? fileConfig.maxRetries ?? 3,
+    // Optional: only files under these directories may be uploaded by the attach tools.
+    uploadRoots: envConfig.TEAMWORK_UPLOAD_ROOTS
+      ? envConfig.TEAMWORK_UPLOAD_ROOTS.split(",").map((x) => x.trim()).filter(Boolean)
+      : fileConfig.uploadRoots || [],
     logLevel: envConfig.LOG_LEVEL || fileConfig.logLevel || "info",
   };
 }
@@ -110,6 +116,13 @@ export function loadConfig() {
     allowedProjectIds: merged.allowedProjectIds,
     requestTimeout: merged.requestTimeout,
     maxRetries: merged.maxRetries,
+    uploadRoots: merged.uploadRoots.map((r) => {
+      try {
+        return realpathSync(resolve(r));
+      } catch {
+        throw new Error(`TEAMWORK_UPLOAD_ROOTS entry does not exist: ${r}`);
+      }
+    }),
     logLevel: merged.logLevel,
   };
 }
