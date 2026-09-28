@@ -1,54 +1,138 @@
-# Claude Code & VS Code MCP Setup Guide
+# Client setup
 
-This guide explains how to configure Claude Code and VS Code to use the local Teamwork MCP server as the default instead of the cloud-based version.
+This server is a plain **stdio** MCP server. Every MCP client starts it the same way:
 
-## Requirements
+| | |
+|---|---|
+| command | `node` (or an absolute path to `node`, see [Claude Desktop](#claude-desktop)) |
+| args | `["/absolute/path/to/teamwork-mcp/src/server.js"]` |
+| env | the `TEAMWORK_*` variables below |
+| transport | stdio: JSON-RPC on stdout, JSON logs on stderr |
 
-- Node.js 18+
-- Git (for this repository)
-- VS Code or Claude Code IDE
-- Valid Teamwork API credentials
+The only real differences between clients are **where the JSON file lives** and
+**which top-level key it uses** (`servers` in VS Code, `mcpServers` in Claude
+Code / Claude Desktop / Copilot CLI).
 
-## Installation
+One checkout can serve any number of clients, projects and agents at once. Each
+client session starts its own server process, and nothing in the server is tied
+to a particular project or user: "me" is always whoever owns the configured token.
 
-1. Clone this repository:
+- [Install](#install)
+- [Environment variables](#environment-variables)
+- [Claude Code](#claude-code)
+- [VS Code (and GitHub Copilot in VS Code)](#vs-code-and-github-copilot-in-vs-code)
+- [GitHub Copilot CLI](#github-copilot-cli)
+- [Claude Desktop](#claude-desktop)
+- [Any other stdio MCP client](#any-other-stdio-mcp-client)
+- [Verify and troubleshoot](#verify-and-troubleshoot)
+
+## Install
+
 ```bash
 git clone git@github.com:corcronje/teamwork-mcp.git
 cd teamwork-mcp
 npm install
+npm run test:unit        # offline sanity check, no credentials needed
 ```
 
-2. Configure environment variables:
+Requires Node.js 18+. Use the absolute path of `src/server.js` in every config below.
+
+## Environment variables
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `TEAMWORK_BASE_URL` | yes | | Your site, e.g. `https://your-site.teamwork.com` |
+| `TEAMWORK_API_TOKEN` | yes | | Teamwork API key (Profile > Edit my details > API & Mobile) |
+| `TEAMWORK_AUTH_MODE` | no | `basic_token_x` | `basic_token_x` for Teamwork API keys (Bearer returns 401 for them); `bearer` only for OAuth access tokens |
+| `TEAMWORK_API_VERSION` | no | `v3` | Leave as `v3` |
+| `TEAMWORK_READ_ONLY` | no | `false` | `true` blocks every write tool |
+| `TEAMWORK_ALLOWED_PROJECT_IDS` | no | (any) | Comma-separated project ids that write tools may touch. Writes whose project cannot be determined are refused. |
+| `TEAMWORK_UPLOAD_ROOTS` | no | (any) | Comma-separated directories. If set, the attach tools only upload files inside them. |
+| `TEAMWORK_REQUEST_TIMEOUT` | no | `30000` | ms |
+| `TEAMWORK_MAX_RETRIES` | no | `3` | `0` disables retries. POSTs are never retried on 5xx/timeouts. |
+| `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` (stderr) |
+
+Never put a real token in a file that is committed to git. Each section below shows
+a way to keep the token out of shared files.
+
+## Claude Code
+
+Claude Code's config format differs from VS Code's: the key is `mcpServers`, not `servers`.
+
+**User scope** (available in every project on this machine; stored in `~/.claude.json`):
+
 ```bash
-cp .env.example .env
+claude mcp add teamwork -s user \
+  -e TEAMWORK_BASE_URL=https://your-site.teamwork.com \
+  -e TEAMWORK_API_TOKEN=your_api_token \
+  -e TEAMWORK_AUTH_MODE=basic_token_x \
+  -- node /absolute/path/to/teamwork-mcp/src/server.js
 ```
 
-3. Edit `.env` with your credentials:
-```env
-TEAMWORK_BASE_URL=https://your-teamwork-site.com
-TEAMWORK_API_TOKEN=your-api-token
-TEAMWORK_API_VERSION=v3
-TEAMWORK_AUTH_MODE=basic_token_x
-TEAMWORK_READ_ONLY=false
-LOG_LEVEL=info
+**Project scope** (shared with a repo via `.mcp.json` at its root). Keep the token out
+of the file with `${VAR}` expansion; Claude Code substitutes it from the environment
+it was launched in:
+
+```bash
+cd /path/to/your/repo
+claude mcp add teamwork -s project \
+  -e TEAMWORK_BASE_URL=https://your-site.teamwork.com \
+  -e 'TEAMWORK_API_TOKEN=${TEAMWORK_API_TOKEN}' \
+  -e TEAMWORK_AUTH_MODE=basic_token_x \
+  -e TEAMWORK_ALLOWED_PROJECT_IDS=12345 \
+  -- node /absolute/path/to/teamwork-mcp/src/server.js
 ```
 
-## VS Code Configuration
-
-### macOS
-Edit `~/Library/Application Support/Code/User/mcp.json`:
+That writes exactly this (verified with `claude mcp add` 2.1.x):
 
 ```json
 {
-  "servers": {
-    "teamwork-local": {
+  "mcpServers": {
+    "teamwork": {
       "type": "stdio",
       "command": "node",
       "args": ["/absolute/path/to/teamwork-mcp/src/server.js"],
       "env": {
-        "TEAMWORK_BASE_URL": "https://your-org.teamwork.com",
-        "TEAMWORK_API_VERSION": "v3",
-        "TEAMWORK_API_TOKEN": "YOUR_TOKEN",
+        "TEAMWORK_BASE_URL": "https://your-site.teamwork.com",
+        "TEAMWORK_API_TOKEN": "${TEAMWORK_API_TOKEN}",
+        "TEAMWORK_AUTH_MODE": "basic_token_x",
+        "TEAMWORK_ALLOWED_PROJECT_IDS": "12345"
+      }
+    }
+  }
+}
+```
+
+Then `export TEAMWORK_API_TOKEN=...` in your shell profile. Claude Code asks you to
+approve a project-scoped server the first time. Tips:
+
+- Set `TEAMWORK_ALLOWED_PROJECT_IDS` per repo, so an agent working on project A cannot write to project B.
+- `claude mcp list` shows connection status, `claude mcp get teamwork` shows the resolved config, and `/mcp` inside a session shows the tools.
+- Local scope (`-s local`, the default) is like user scope but only for the current directory.
+
+## VS Code (and GitHub Copilot in VS Code)
+
+VS Code's built-in MCP support is what GitHub Copilot Chat (agent mode) uses, so there
+is **one** config for both. The key is `servers`, and every entry needs `"type": "stdio"`.
+
+- User-wide: Command Palette > **MCP: Open User Configuration**
+  (macOS `~/Library/Application Support/Code/User/mcp.json`,
+  Linux `~/.config/Code/User/mcp.json`, Windows `%APPDATA%\Code\User\mcp.json`)
+- Per workspace: `.vscode/mcp.json` in the repo
+
+```json
+{
+  "inputs": [
+    { "type": "promptString", "id": "teamwork-token", "description": "Teamwork API token", "password": true }
+  ],
+  "servers": {
+    "teamwork": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/teamwork-mcp/src/server.js"],
+      "env": {
+        "TEAMWORK_BASE_URL": "https://your-site.teamwork.com",
+        "TEAMWORK_API_TOKEN": "${input:teamwork-token}",
         "TEAMWORK_AUTH_MODE": "basic_token_x",
         "TEAMWORK_READ_ONLY": "false",
         "TEAMWORK_ALLOWED_PROJECT_IDS": ""
@@ -58,90 +142,95 @@ Edit `~/Library/Application Support/Code/User/mcp.json`:
 }
 ```
 
-### Linux
-Edit `~/.config/Code/User/mcp.json` with the same configuration.
+`${input:...}` makes VS Code prompt once and store the token securely, which makes the
+file safe to commit as `.vscode/mcp.json`. In a private user-level `mcp.json` you can
+put the token inline instead. VS Code also accepts `"envFile": "/absolute/path/to/.env"`
+on a stdio server to load variables from a file.
 
-### Windows
-Edit `%APPDATA%\Code\User\mcp.json` with the same configuration.
+After changing the file or updating this repo, restart the server: **MCP: List Servers**
+> teamwork > Restart. In Copilot Chat, switch to **Agent** mode and open the tools picker
+to check that the `teamwork_*` tools are enabled.
 
-## Claude Code Configuration
+## GitHub Copilot CLI
 
-The MCP server will be automatically available when configured in VS Code. Claude Code reads the VS Code MCP configuration.
+The Copilot CLI (`copilot`) reads `~/.copilot/mcp-config.json`, which uses `mcpServers`
+and `"type": "local"` for stdio servers. You can also add a server interactively with
+`/mcp add`. This shape follows GitHub's documentation; it was not tested on a machine
+with the CLI installed.
 
-## Verifying the Setup
-
-1. Start VS Code with the MCP configured:
-```bash
-code
+```json
+{
+  "mcpServers": {
+    "teamwork": {
+      "type": "local",
+      "command": "node",
+      "args": ["/absolute/path/to/teamwork-mcp/src/server.js"],
+      "env": {
+        "TEAMWORK_BASE_URL": "https://your-site.teamwork.com",
+        "TEAMWORK_API_TOKEN": "your_api_token",
+        "TEAMWORK_AUTH_MODE": "basic_token_x"
+      },
+      "tools": ["*"]
+    }
+  }
+}
 ```
 
-2. Open the Claude Code extension
+The Copilot *coding agent* on github.com runs in GitHub's cloud, not on your machine,
+so a local path like the one above does not exist there. It would need this repository
+installed in that environment and is not covered here.
 
-3. Try one of these commands to verify the MCP is loaded:
-- List assigned tasks
-- Get task details
-- Create a task comment
+## Claude Desktop
 
-## Available Tools
+Edit `claude_desktop_config.json` (Settings > Developer > Edit Config):
 
-Once configured, you'll have access to:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
-- `teamwork_get_my_tasks` - List your assigned tasks
-- `teamwork_get_project_tasks` - List tasks in a project
-- `teamwork_get_task_detail` - Get full task details
-- `teamwork_create_task` - Create a new task
-- `teamwork_update_task` - Update an existing task
-- `teamwork_move_task` - Move task between lists
-- `teamwork_move_task_stage` - Move task to workflow stage
-- `teamwork_get_workflow_stages` - List workflow stages
-- `teamwork_get_task_comments` - Get task comments
-- `teamwork_add_task_comment` - Add comment to task
-- `teamwork_add_task_time_entry` - Add time entry to task
-- `teamwork_get_notifications` - Get notifications
-- `teamwork_upload_file_to_task` - Attach file to task
+The key is `mcpServers`, and there is no `${VAR}` expansion, so the token goes inline.
+The file is private to your machine. GUI apps do not inherit your shell `PATH`, so if
+you use nvm/asdf/Homebrew, give the **absolute path to node** (`which node`):
 
-## Troubleshooting
-
-### MCP Server Won't Start
-
-```bash
-# Test the configuration
-npm run check
-
-# Run in debug mode
-LOG_LEVEL=debug npm start
+```json
+{
+  "mcpServers": {
+    "teamwork": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/teamwork-mcp/src/server.js"],
+      "env": {
+        "TEAMWORK_BASE_URL": "https://your-site.teamwork.com",
+        "TEAMWORK_API_TOKEN": "your_api_token",
+        "TEAMWORK_AUTH_MODE": "basic_token_x"
+      }
+    }
+  }
+}
 ```
 
-### Tools Not Available
+Fully quit and reopen Claude Desktop after editing. Its MCP logs are in
+`~/Library/Logs/Claude/mcp-server-teamwork.log` (macOS).
 
-1. Verify the MCP JSON configuration points to the correct server path
-2. Ensure environment variables are set correctly
-3. Check that the API token is valid and has appropriate permissions
+## Any other stdio MCP client
 
-### Time Entry Issues
+Give the client:
 
-The time entry endpoint requires:
-- Valid taskId
-- Valid date format (YYYY-MM-DD)
-- Valid hours/minutes values
+1. **command**: `node` (absolute path if the client does not inherit your shell PATH)
+2. **args**: `/absolute/path/to/teamwork-mcp/src/server.js`
+3. **env**: at least `TEAMWORK_BASE_URL`, `TEAMWORK_API_TOKEN`, `TEAMWORK_AUTH_MODE=basic_token_x`
 
-## Performance Notes
+Put that under whatever top-level key the client expects (`servers`, `mcpServers`, `context_servers`, ...).
+The server speaks MCP over stdin/stdout only and writes logs to stderr, so do not redirect
+stderr into stdout.
 
-- Default request timeout: 30 seconds
-- Auto-retry on transient errors (429, 5xx, timeouts)
-- Structured JSON logging for debugging
+Instead of env vars you can point `TEAMWORK_CONFIG_FILE` at a JSON file shaped like
+[`mcp.config.example.json`](../mcp.config.example.json). Env vars take precedence over the file.
 
-## Security
+## Verify and troubleshoot
 
-- Always keep `.env` in `.gitignore`
-- Use environment variables for sensitive data
-- Set `TEAMWORK_READ_ONLY=true` for safety if only reading
-- Rotate API tokens periodically
-
-## Support
-
-For issues or questions:
-1. Check the logs with `LOG_LEVEL=debug npm start`
-2. Verify your Teamwork API token is valid
-3. Ensure your network can reach the Teamwork API
-4. Review the README.md for additional configuration options
+- Smoke test outside any client: `TEAMWORK_BASE_URL=... TEAMWORK_API_TOKEN=... TEAMWORK_AUTH_MODE=basic_token_x node src/server.js`
+  should print a JSON `"Teamwork MCP server initialized"` line on stderr and then wait for input (Ctrl-C to exit).
+- In the client, call `teamwork_get_current_user`. It should return the token owner.
+- `AUTHENTICATION_FAILED` (401): wrong token, or `TEAMWORK_AUTH_MODE` is not `basic_token_x` for an API key.
+- `FORBIDDEN` on a write: `TEAMWORK_READ_ONLY=true`, the project is not in `TEAMWORK_ALLOWED_PROJECT_IDS`, or the file is outside `TEAMWORK_UPLOAD_ROOTS`.
+- Tools missing or stale after `git pull`: restart the server in the client (each client caches the tool list per process).
+- `LOG_LEVEL=debug` logs every API request (method, URL, status, duration) to stderr. Tokens are never logged.

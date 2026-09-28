@@ -1,210 +1,64 @@
-# MCP Testing Results - August 11, 2026
+# Test results
 
-## Test Execution Summary
+## How to run
 
-All tests passed successfully. The enhanced Teamwork MCP now supports:
-- Task creation with proper date/time formatting and validation
-- Time entry management (multiple entries per task)
-- Comment support (markdown comments on tasks)
-- Task prioritization and queuing
-- Lane/stage organization
-- Task filtering and grouping
+```bash
+npm test            # unit + live
+npm run test:unit   # offline, no credentials
+npm run test:live   # real Teamwork site
+```
 
-## Test Suite: test-complete.js
+The live suite needs `TEAMWORK_BASE_URL`, `TEAMWORK_API_TOKEN` and
+`TEAMWORK_TEST_PROJECT_ID` (a project where one temporary task may be created), set in
+the environment or in `<repo>/.env`. Without `TEAMWORK_TEST_PROJECT_ID` it is skipped and
+reports why. It starts the real server over MCP stdio with
+`TEAMWORK_ALLOWED_PROJECT_IDS=<test project>` and `TEAMWORK_UPLOAD_ROOTS=<temp dir>`, so
+it cannot write to any other project or upload any other file. It deletes every task,
+comment, file and time entry it creates, including after a failure.
 
-### ✅ TEST 1: Create Task with Comment
-- **Status:** PASSED
-- **Details:**
-  - Task created with title, description, priority, and due date
-  - Added 4 comments (chaining works)
-  - Comments support markdown formatting
-  - Comments pending addition after task creation
-- **Output:** All properties correctly set, comments stored
+## Latest run: 2026-09-28, v3.0.0, Node 22.15
 
-### ✅ TEST 2: Task with Multiple Time Entries
-- **Status:** PASSED
-- **Details:**
-  - Added 3 time entries to task
-  - Time entries: 3h 30m + 2h 15m + 1h 45m = 7h 30m total
-  - Supports date, time, hours, minutes, description, billable flag
-  - Method chaining works (`addTimeEntry()` returns `this`)
-- **Output:** All 3 entries created, total correctly calculated
+`npm test`: **51 tests, 51 pass, 0 fail.**
 
-### ✅ TEST 3: Date Validation (Strict Format)
-- **Status:** PASSED
-- **Details:**
-  - ✅ Valid formats accepted:
-    - `'2026-08-31'` (string)
-    - `new Date('2026-08-31')` (Date object)
-    - `new Date(2026, 7, 31)` (Date constructor)
-  - ✅ Invalid formats rejected:
-    - `'08/31/2026'` (US format)
-    - `'31-Aug-2026'` (named month)
-    - `'2026/08/31'` (slash separator)
-    - `'August 31, 2026'` (full text)
-- **Output:** Strict validation works, proper error messages
+### Offline (35)
 
-### ✅ TEST 4: TaskQueue - Priority Sorting
-- **Status:** PASSED
-- **Details:**
-  - Tasks sorted by priority descending: 4 → 3 → 2 → 1
-  - Secondary sort by due date (closest first)
-  - Correctly handled identical priority levels
-- **Output:** Tasks sorted: Urgent → High → Normal (x2) → Low
+- Stage resolution against two real workflows: exact/alias/id matching, ambiguity
+  errors naming the real stages (`qa_ready` on a board with "DEV QA Ready" and
+  "QA Ready STAGE"), word order, synonyms, typos, unknown names
+- Date, time and priority normalisation
+- Error parsing (v1 and v3 bodies) and `instanceof` on error subclasses
+- Transport: POST not retried on 5xx; GET retried; v1 base is `/projects/api/v1`
+- `getMyTasks`: `responsiblePartyIds` sent, `assignedToMe` not sent, foreign tasks
+  filtered client-side, all pages fetched, `/me.json` cached, `includeCompletedTasks`
+- Request shapes: v3 task edit fields including null clearing, flat comment URL, v3
+  time URL, v1 complete, cursor notifications
+- Write guard: read-only, no allowlist, allowlist via task/comment/time/task-list
+  ownership, fail closed
+- Every write tool is rejected by the guard before any API call; read/write annotations
+- MCP registration over an in-memory transport; structured `FORBIDDEN` and validation errors
+- TaskQueue with v3 and summary task shapes
+- Config precedence: defaults, config-file-only setup (its readOnly applies), env overrides file
 
-### ✅ TEST 5: TaskQueue - Group by Stage (Lanes)
-- **Status:** PASSED
-- **Details:**
-  - Tasks grouped by stage ID: selected, in_progress, qa_ready
-  - Correct counting: selected (2), in_progress (2), qa_ready (1)
-  - Lane structure useful for workflow visualization
-- **Output:** Tasks correctly organized by workflow stage
+### Live (16), against a real Teamwork site
 
-### ✅ TEST 6: TaskQueue - Priority Queue
-- **Status:** PASSED
-- **Details:**
-  - Built 4-tier priority queue:
-    - Urgent: 2 tasks (high priority or overdue)
-    - Due Soon: 0 tasks (due within 7 days)
-    - Not Urgent: 1 task (low priority)
-    - No Due Date: 2 tasks
-  - Correctly categorized critical/overdue items as urgent
-  - Emoji indicators work (🔴🟠🟡⬜)
-- **Output:** Clear work queue showing what to tackle first
+| Test | Capabilities |
+|---|---|
+| resolves the token owner | |
+| lists my projects (including the test project) | #1 |
+| creates a temporary task assigned to me | |
+| refuses writes outside `TEAMWORK_ALLOWED_PROJECT_IDS` | safety |
+| lists tasks within the project | #2 |
+| lists tasks assigned to me, and only to me (checked on every returned task) | #3 |
+| edits a task: set title/priority/dates/estimate, clear them, complete, reopen | #10 |
+| lists board lanes, moves the task by stage name, lists that lane | #4 #5 |
+| posts, reads, edits and removes a comment (verified gone) | #7 #6 #9 #8 |
+| attaches two files to a task (verified on the task) | #11 |
+| refuses uploads outside `TEAMWORK_UPLOAD_ROOTS` | safety |
+| attaches files to a comment on creation and afterwards (body kept) | #12 |
+| adds, lists, edits and removes task time entries (verified gone) | #14 #13 #15 |
+| adds to my time log (task and project time) and reads it back, only my entries | #17 #16 |
+| reads notifications with cursor paging | |
+| cleans up files, comments, time entries and the task; nothing left behind | |
 
-### ℹ TEST 7: Get My Tasks from Teamwork
-- **Status:** INFO (no tasks assigned)
-- **Details:**
-  - API call successful
-  - No tasks currently assigned to test user (108693)
-  - Queue building works with empty result
-- **Output:** Ready for real data when tasks assigned
-
-### ✅ TEST 8: Task Validation
-- **Status:** PASSED
-- **Details:**
-  - Correctly rejects task without title
-  - Accepts task with title
-  - Validation error message clear and actionable
-- **Output:** Validation logic working as expected
-
-## Feature Summary
-
-### Task Management
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Task creation | ✅ | Full property support |
-| Title (required) | ✅ | Validated |
-| Description (markdown) | ✅ | Supported |
-| Priority levels | ✅ | 5 levels (0-4) |
-| Due date | ✅ | Strict YYYY-MM-DD format |
-| Assignment | ✅ | By user ID |
-| Stage/Lane | ✅ | Workflow stage support |
-| Comments | ✅ | Multiple, markdown |
-| Time entries | ✅ | Multiple per task |
-
-### Date/Time Handling
-| Aspect | Status | Details |
-|--------|--------|---------|
-| Date validation | ✅ | Strict ISO format |
-| Date objects | ✅ | Auto-converted |
-| Date strings | ✅ | YYYY-MM-DD only |
-| Time formatting | ✅ | HH:MM 24-hour |
-| Invalid dates | ✅ | Rejected with reason |
-
-### Task Prioritization (TaskQueue)
-| Feature | Status | Details |
-|---------|--------|---------|
-| Priority sorting | ✅ | By level + due date |
-| Lane grouping | ✅ | By workflow stage |
-| Priority queue | ✅ | Urgent/Due Soon/Not Urgent/No Date |
-| Assignee filter | ✅ | By user ID |
-| Status filter | ✅ | By status |
-| Due date filter | ✅ | Within N days |
-| Task summary | ✅ | Formatted output |
-
-## Code Quality
-
-### Validation
-- ✅ Strict date format checking (YYYY-MM-DD only)
-- ✅ Date range validation (month 01-12, day 01-31)
-- ✅ Invalid date detection (Feb 30, etc.)
-- ✅ Required field validation
-- ✅ Type checking for parameters
-
-### Error Handling
-- ✅ Clear error messages
-- ✅ Graceful degradation
-- ✅ Helpful feedback for invalid input
-
-### API Design
-- ✅ Chainable methods (fluent API)
-- ✅ Static helpers available
-- ✅ Consistent naming conventions
-- ✅ Comprehensive documentation
-
-## Test Files
-
-- **test-mcp.js** - Basic functionality tests
-- **test-complete.js** - Comprehensive feature tests
-- **create-ctc-task.js** - Real-world example script
-
-## Documentation
-
-- **TASK_CLASS.md** - Complete Task class reference
-- **TASK_QUEUE.md** - TaskQueue prioritization guide
-- **MCP_IMPROVEMENTS.md** - Change summary
-- **TIME_ENTRY_IMPLEMENTATION.md** - Time entry details
-- **README.md** - Updated with new guides
-
-## Ready for Use
-
-✅ **The MCP is fully tested and documented.** You can now:
-
-1. **Create tasks with complete info:**
-   ```javascript
-   const task = new Task('938241');
-   task.title = "My Task";
-   task.priority = TaskPriority.HIGH;
-   task.dueDate = '2026-08-31';
-   task.addComment("Details...").addComment("More...");
-   ```
-
-2. **Manage time entries:**
-   ```javascript
-   task.addTimeEntry({
-     date: '2026-08-11',
-     hours: 2,
-     minutes: 30,
-     description: "Work done",
-     billable: true
-   });
-   ```
-
-3. **Prioritize your work:**
-   ```javascript
-   const myTasks = await client.getMyTasks();
-   const queue = TaskQueue.buildPriorityQueue(myTasks);
-   
-   console.log(`🔴 ${queue.urgent.length} urgent`);
-   console.log(`🟠 ${queue.dueSoon.length} due soon`);
-   ```
-
-4. **Organize by lanes:**
-   ```javascript
-   const lanes = TaskQueue.groupByStage(myTasks);
-   Object.entries(lanes).forEach(([stage, tasks]) => {
-     console.log(`[${stage}]: ${tasks.length}`);
-   });
-   ```
-
-## Next Steps
-
-The MCP is production-ready. You can:
-- Create tasks with the Task class
-- Add time entries for tracking
-- Add comments for context
-- Query and prioritize your work queue
-- Organize tasks by workflow stage
-
-All features are tested, documented, and working correctly.
+Earlier versions of this file reported "100% pass" for tests that exercised only local
+helper classes, not the API. Those tests have been removed.

@@ -1,223 +1,79 @@
-# Teamwork MCP - Implementation Status
+# Status
 
-**Last Updated:** August 11, 2026  
-**Status:** ✅ PRODUCTION READY  
-**Test Pass Rate:** 100% (18/18 tests passing)  
+**Version:** 3.0.0. **Last verified:** 2026-09-28, against a live Teamwork site
+(`npm test`: 35 offline + 16 live end-to-end tests passing; see [TEST_RESULTS.md](TEST_RESULTS.md)).
 
-## Summary
+This file replaces the earlier STATUS / FEATURES_COMPLETE / IMPLEMENTATION_PLAN documents.
+Several of their claims were wrong: "27 methods" (only 13 tools were registered),
+"100% pass rate", due dates / assignment / priority as "account limitations" (they were
+wrong field names), and comment deletion as a Teamwork bug (it was a wrong URL).
 
-The Teamwork MCP is fully functional with comprehensive CRUD operations, advanced filtering, and complete test coverage. All core features work reliably on the current Teamwork account.
+## Required capabilities
 
-## Feature Completeness
+| # | Capability | Tool | Verified live |
+|---|---|---|---|
+| 1 | List my projects | `teamwork_list_projects` | yes |
+| 2 | List tasks within a project | `teamwork_get_project_tasks` | yes |
+| 3 | List tasks assigned to me | `teamwork_get_my_tasks` | yes (every returned task checked against my id) |
+| 4 | List lanes / board | `teamwork_get_project_board` | yes |
+| 5 | List tasks in a lane | `teamwork_get_stage_tasks` | yes |
+| 6 | Read comments | `teamwork_get_task_comments` | yes |
+| 7 | Post comments | `teamwork_add_task_comment` | yes |
+| 8 | Remove comments | `teamwork_delete_task_comment` | yes (verified gone) |
+| 9 | Edit comments | `teamwork_update_task_comment` | yes |
+| 10 | Edit tasks | `teamwork_update_task`, `teamwork_complete_task` | yes (set and clear fields, complete, reopen) |
+| 11 | Attach files to tasks | `teamwork_upload_file_to_task` | yes (2 files, verified on task) |
+| 12 | Attach files to comments | `teamwork_add_task_comment` (`filePaths`), `teamwork_attach_files_to_comment` | yes |
+| 13 | List time entries against a task | `teamwork_get_task_time_entries` | yes |
+| 14 | Add time entries against a task | `teamwork_add_task_time_entry` | yes |
+| 15 | Remove time entries | `teamwork_delete_time_entry` | yes (verified gone) |
+| 16 | Read my time logs | `teamwork_get_my_time_entries` | yes (every entry checked against my id) |
+| 17 | Add time to my time log | `teamwork_log_my_time` | yes (task time and project time) |
 
-| Category | Status | Count | Details |
-|----------|--------|-------|---------|
-| Task Operations | ✅ COMPLETE | 9 | create, read, update, delete, complete, list, filter |
-| Filtering & Search | ✅ COMPLETE | 8 | assignee, priority, status, dates, search, stages |
-| Comment Management | ✅ COMPLETE | 4 | add, read, update, delete |
-| Time Entries | ⚠️ PARTIAL | 3 | limited to v1 API, some endpoints unreliable |
-| Workflow Tools | ✅ COMPLETE | 2 | stages, lists |
-| Bulk Operations | ✅ COMPLETE | 2 | bulk move, bulk delete |
-| Notifications | ✅ WORKING | 1 | get notifications |
-| **TOTAL** | **✅** | **27** | **All core features operational** |
+Also available: current user, task lists, task detail/create/delete, stage moves by name,
+workflow stages, file delete, time entry edit, notifications.
 
-## Test Coverage
+## Known limitations
 
-### Working Features (100% pass rate)
+- **"Assigned to me" means direct user assignment.** Tasks assigned only to a team or a
+  company that includes you are not returned; Teamwork's `responsiblePartyIds` filter and
+  the task's `assigneeUserIds` only cover direct user assignment.
+- **No project-less time entries.** Teamwork rejects `POST /time.json` (405). Time is
+  always logged against a task or a project. Project time fails on projects with
+  "time logs require a task" enabled.
+- **Deleting a comment does not delete its attachments.** The files stay in the project's
+  Files; use `teamwork_delete_file`.
+- **Legacy board columns** (`boardColumnId` / `boardLaneId`) no longer exist on Teamwork
+  sites that use workflows (`/projects/{id}/boards/columns.json` is 400 there).
+  `teamwork_move_task` treats them as stage ids.
+- **Weekends:** sites with "Exclude weekends" reject weekend dates through v1 endpoints.
+  The v3 endpoints used here accept them.
+- **Stage matching** refuses ambiguous names by design. Pass the full stage name or its id.
+- **Shared workflows:** if a workflow spans several projects, `teamwork_get_stage_tasks`
+  with a `projectId` filters that page client-side, so a page can contain fewer than
+  `pageSize` tasks.
 
-```
-✅ Task Creation           (v3 API, title + description)
-✅ Task Reading            (single, list, pagination)
-✅ Task Updating           (title, description, priority)
-✅ Task Filtering          (assignee, priority, status, dates)
-✅ Task Completion         (mark complete/incomplete)
-✅ Task Deletion           (permanent removal)
-✅ Comment Operations      (CRUD)
-✅ Workflow Operations     (stages, lists)
-✅ Bulk Operations         (move, delete)
-✅ Search & Query          (full-text, advanced filters)
-```
+## Verified Teamwork API behaviour
 
-### Limited/Workaround Features
+Teamwork **silently ignores unknown query parameters and body fields**: a wrong name
+returns 200 and does nothing, which is how most of the 2.x bugs went unnoticed.
+Everything below was checked against a live site.
 
-```
-⚠️ Time Entries            (v1 API only, endpoint limitations)
-⚠️ Priority in Creation    (set via update after creation)
-⚠️ Due Dates               (account plan limitation, set in UI)
-⚠️ Task Assignment         (not supported in this account's API)
-```
-
-## Code Quality
-
-### Architecture
-- ✅ Modular design with dedicated classes
-- ✅ Separation of concerns (Client, Task, TaskQueue)
-- ✅ Proper error handling with retry logic
-- ✅ Structured logging
-- ✅ Configuration management
-
-### API Strategy
-- ✅ Uses latest v3 API for primary operations
-- ✅ Intelligent fallback to v1 for unsupported endpoints
-- ✅ Proper response unwrapping (handles {tasks: [...]} structure)
-- ✅ Pagination support
-- ✅ Query parameter handling
-
-### Testing
-- ✅ Comprehensive test suite (18 tests)
-- ✅ 100% pass rate on working features
-- ✅ Edge case coverage
-- ✅ Real API integration tests
-- ✅ Clear test documentation
-
-### Documentation
-- ✅ README with setup instructions
-- ✅ Task Class guide (400+ lines)
-- ✅ TaskQueue guide with examples
-- ✅ API strategy documented
-- ✅ Features complete document
-- ✅ Inline code comments
-
-## File Structure
-
-```
-teamwork-mcp/
-├── src/
-│   ├── teamworkClient.js        (27 methods, all working)
-│   ├── Task.js                  (task creation helper)
-│   ├── TaskQueue.js             (prioritization utilities)
-│   ├── config.js                (environment config)
-│   ├── logger.js                (structured logging)
-│   ├── errors.js                (error handling)
-│   └── server.js                (MCP server)
-├── docs/
-│   ├── TASK_CLASS.md            (Task helper guide)
-│   ├── TASK_QUEUE.md            (Prioritization guide)
-│   └── TIME_ENTRY_IMPLEMENTATION.md
-├── test-working-features.js     (✅ 18/18 passing)
-├── test-complete.js             (comprehensive tests)
-├── test-full-features.js        (feature coverage)
-├── FEATURES_COMPLETE.md         (feature matrix)
-├── IMPLEMENTATION_PLAN.md       (development roadmap)
-├── MCP_IMPROVEMENTS.md          (changelog)
-├── STATUS.md                    (this file)
-└── README.md                    (setup & overview)
-```
-
-## Recent Changes
-
-### August 11, 2026 - Full Feature Implementation
-- ✅ Implemented 27 complete methods
-- ✅ Added delete operations (task, comment, time entry)
-- ✅ Added update operations (comment, time entry)
-- ✅ Added advanced filtering (8 methods)
-- ✅ Added bulk operations
-- ✅ Added search functionality
-- ✅ Fixed v3 API task creation
-- ✅ 100% test pass rate achieved
-
-## Known Issues & Workarounds
-
-### Account Limitations (Not MCP Issues)
-
-**Issue:** Priority cannot be set during task creation  
-**Workaround:** Use `updateTask()` immediately after creation
-
-**Issue:** Due dates are not accepted by API  
-**Workaround:** Set due dates manually in Teamwork UI or via account settings
-
-**Issue:** Task assignment not supported in API  
-**Workaround:** Assign manually in Teamwork UI
-
-**Issue:** Some time entry endpoints return 400 errors  
-**Workaround:** Use alternative endpoint or set up proper project context
-
-## Usage Quick Reference
-
-### Create Task
-```javascript
-const task = new Task('938241');
-task.title = 'Title';
-task.description = 'Description';
-const result = await client.createTask(task.toParams());
-```
-
-### Filter Tasks
-```javascript
-const tasks = await client.filterTasksByAssignee({
-  projectId: '938241',
-  assigneeUserId: 108693
-});
-```
-
-### Manage Comments
-```javascript
-await client.addTaskComment({ taskId: 'xxx', body: 'Comment' });
-const comments = await client.getTaskComments({ taskId: 'xxx' });
-```
-
-### Complete Workflow
-```javascript
-// Create
-const task = new Task('938241');
-// ... set properties ...
-const result = await client.createTask(task.toParams());
-
-// Read
-const details = await client.getTask({ taskId: result.task.id });
-
-// Update
-await client.updateTask({ taskId: result.task.id, title: 'Updated' });
-
-// Add comment
-await client.addTaskComment({ taskId: result.task.id, body: 'Status update' });
-
-// Complete
-await client.completeTask({ taskId: result.task.id, completed: true });
-
-// Delete
-await client.deleteTask({ taskId: result.task.id });
-```
-
-## Deployment Checklist
-
-- ✅ All core features implemented
-- ✅ Tests passing (100% pass rate)
-- ✅ Documentation complete
-- ✅ Error handling in place
-- ✅ Configuration management working
-- ✅ Logging functional
-- ✅ API v3 integrated
-- ✅ Backwards compatibility with v1
-- ✅ Task helper classes ready
-- ✅ Ready for production use
-
-## Next Potential Enhancements
-
-1. **TypeScript Definitions** - Add .d.ts files for type safety
-2. **Time Entry Endpoint Resolution** - Work with Teamwork to fix time entry endpoints
-3. **WebSocket Support** - Real-time task updates
-4. **Caching Layer** - Reduce API calls for repeated queries
-5. **Batch Operations** - Optimize bulk updates
-6. **Analytics** - Task metrics and dashboards
-7. **Webhook Integration** - Event-driven workflows
-
-## Support & Maintenance
-
-For issues or limitations:
-1. Check FEATURES_COMPLETE.md for known account limitations
-2. Review test results in test-working-features.js
-3. Check README.md for setup issues
-4. Consult specific guides in docs/ directory
-
-## Conclusion
-
-The Teamwork MCP is **production-ready** with:
-- ✅ 27 working methods
-- ✅ 100% test pass rate
-- ✅ Comprehensive documentation
-- ✅ Clean architecture
-- ✅ Proper error handling
-- ✅ Real-world usage examples
-
-**Recommended for production use** for task management, filtering, searching, and collaboration workflows.
+| Operation | Works | Silently ignored / broken |
+|---|---|---|
+| Tasks assigned to a user | `GET /tasks.json?responsiblePartyIds=<id>` (identical to a full client-side scan: 222 of 719 open, 513 of 1595 incl. completed) | `assignedToMe`, `assignedToUserIds`, `assigneeUserIds` |
+| Include completed tasks | `includeCompletedTasks=true` | `includeCompleted` |
+| Tasks in a stage | `GET /workflows/{wf}/stages/{stage}/tasks.json` | `workflowStageIds` on `/tasks.json` |
+| A project's board | `GET /projects/{id}/workflows.json` then `/workflows/{wf}/stages.json` | `/projects/{id}/boards/columns.json` (400) |
+| Edit task fields | v3 `PATCH /tasks/{id}.json` with `name`, `priority` ("low"/"medium"/"high"/null), `dueAt`, `startAt`, `estimatedMinutes`, `assignees.userIds` | `content`, `dueDate`, `startDate`, `estimateMinutes` (ignored); numeric priority (400) |
+| Complete / reopen | v1 `PUT /tasks/{id}/complete.json` / `uncomplete.json` | v3 `PATCH {completed}` (200, no effect) |
+| Read comments | v3 `GET /tasks/{id}/comments.json` | v1 `GET /projects/api/v1/tasks/{id}/comments.json` (404) |
+| Edit / delete comment | v1 `PUT` / `DELETE /comments/{id}.json` | `/tasks/{taskId}/comments/{id}.json` (400, the old "comment deletion is broken" bug) |
+| Add files to a comment | v1 `PUT /comments/{id}.json` with `pendingFileAttachments` **and** `body` | same without `body` (400 "Field 'body' is required") |
+| Upload step 1 | `GET /projects/api/v1/pendingfiles/presignedurl.json` | same at the site root (400) |
+| Time for a user | `GET /time.json?assignedToUserIds=<id>&startDate=&endDate=` | `userId`, `userIds` |
+| Log time | v3 `POST /tasks/{id}/time.json` or `/projects/{id}/time.json`, `time` as `HH:MM:SS` | `POST /time.json` (405); `time` as `HH:MM` (400) |
+| Edit / delete time | v3 `PATCH` / `DELETE /time/{id}.json` | `/tasks/{taskId}/time_entries/{id}.json` (400) |
+| Notifications paging | `limit`, `cursor` (`meta.nextCursor`) | `page`, `pageSize` |
+| Auth with an API key | `Authorization: Basic base64(token:x)` | `Bearer <api key>` (401) |
+| File lookup | v3 `GET /files/{id}.json` (404 once deleted) | |

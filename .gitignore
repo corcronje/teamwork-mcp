@@ -11,3 +11,6 @@ npm-debug.log*
 # Editor/runtime leftovers
 .vscode/
 *.log
+
+# Real config files may contain the API token
+mcp.config.json

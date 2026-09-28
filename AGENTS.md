@@ -1,40 +1,27 @@
-# Agent Notes
+# Agent notes
 
-Operational notes for coding assistants using this repository.
+For coding agents using this server, or working on this repository.
 
-## Source Of Truth
+## Using the tools
 
-- MCP server project: this repository
-- Server entry point: `src/server.js`
+- Start with `teamwork_get_current_user`: "my tasks" and "my time" mean that user.
+- Find ids with `teamwork_list_projects`, then `teamwork_get_project_board` (lanes) and
+  `teamwork_get_project_task_lists`. Never assume ids from another project.
+- Move tasks with `teamwork_move_task_stage` and a stage **name** from that project's
+  board (e.g. `"In Progress"`). If a name is ambiguous the tool returns the real stage
+  names; retry with the exact name or its id. The move is verified before success is reported.
+- Log time with `teamwork_log_my_time` (task or project) and a real start `time` (`HH:MM`).
+- Write tools may be blocked by `TEAMWORK_READ_ONLY` or `TEAMWORK_ALLOWED_PROJECT_IDS`;
+  a `FORBIDDEN` error says which.
+- List tools return compact summaries; pass `detail: "full"` only when you need raw fields.
 
-## Recommended Flow
+## Working on this repo
 
-1. Verify syntax with `npm run check`.
-2. Start in read-only mode first (`TEAMWORK_READ_ONLY=true`).
-3. Enable writes only when required.
-4. Restrict write access using `TEAMWORK_ALLOWED_PROJECT_IDS` where possible.
-
-## Stage Move Shortcut
-
-Preferred tool:
-
-- `teamwork_move_task_stage`
-
-Supported aliases:
-
-- `selected`
-- `in_progress`
-- `qa_ready`
-
-## Local Helper Commands
-
-```bash
-npm run task:create-mock
-npm run task:move-stage -- --taskId <id> --stage <selected|in_progress|qa_ready>
-```
-
-## Troubleshooting
-
-- If chat tool contracts appear stale after code updates, reload the MCP host/editor session.
-- If create operations fail due to account endpoint differences, verify `taskListId` and fallback behavior.
-- Always verify stage transitions with a follow-up task detail read.
+- Entry point `src/server.js`; tools in `src/tools.js`; API client `src/teamworkClient.js`.
+- Before committing: `npm run check && npm run test:unit`. If you changed API behaviour,
+  also run `npm run test:live` against a sandbox project (`TEAMWORK_TEST_PROJECT_ID`).
+- Teamwork silently ignores unknown parameters and fields. Verify any new filter or field
+  against the live API, and compare with a client-side check, before relying on it.
+  Record the finding in STATUS.md.
+- Never hardcode project, workflow, stage or user ids in `src/`.
+- After changing tools, restart the server in the MCP client; tool lists are cached per process.

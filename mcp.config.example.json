@@ -1,7 +1,7 @@
 {
-  "baseUrl": "https://your-org.teamwork.com",
+  "baseUrl": "https://your-site.teamwork.com",
   "apiVersion": "v3",
-  "token": "your_teamwork_api_token_here",
+  "token": "replace_with_real_token",
   "authMode": "basic_token_x",
   "readOnly": true,
   "allowedProjectIds": [
@@ -10,5 +10,6 @@
   ],
   "requestTimeout": 30000,
   "maxRetries": 3,
-  "logLevel": "info"
+  "logLevel": "info",
+  "uploadRoots": []
 }
