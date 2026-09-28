@@ -16,8 +16,10 @@ export class MCPError extends Error {
     this.retryable = options.retryable ?? false;
     this.retryAfterMs = options.retryAfterMs;
 
-    // Maintain proper prototype chain for instanceof checks
-    Object.setPrototypeOf(this, MCPError.prototype);
+    // Maintain proper prototype chain for instanceof checks. Must use new.target
+    // (not MCPError.prototype), otherwise every subclass instance is downgraded to
+    // a plain MCPError and `instanceof ValidationError` etc. silently fail.
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 
   /**
@@ -148,15 +150,16 @@ export class RateLimitError extends MCPError {
  * Parse Teamwork API error response and return appropriate MCPError
  * @param {Response} response - Fetch response object
  * @param {string|object} data - Parsed response body
+ * @param {{method?: string}} [meta] - Request metadata (fetch Response has no .method)
  * @returns {MCPError}
  */
-export function parseTeamworkError(response, data) {
+export function parseTeamworkError(response, data, { method } = {}) {
   const status = response.status;
   const message = extractErrorMessage(data);
   const baseContext = {
     status,
     url: response.url,
-    method: response.method,
+    method,
   };
 
   if (status === 401 || status === 403) {
@@ -216,13 +219,23 @@ function extractErrorMessage(data) {
     return "Unknown error";
   }
 
-  // Try common error message paths in Teamwork API
-  if (data.error) return String(data.error).slice(0, 200);
-  if (data.message) return String(data.message).slice(0, 200);
-  if (data.errors && Array.isArray(data.errors)) {
-    return String(data.errors[0]).slice(0, 200);
+  // Teamwork error shapes seen on a live site:
+  //   v3: { errors: [{ title, detail }] }  |  { message }
+  //   v1: { MESSAGE, STATUS: "Error" }     |  { content: { message } }
+  if (Array.isArray(data.errors) && data.errors.length) {
+    return data.errors
+      .map((e) => (e && typeof e === "object" ? [e.title, e.detail].filter(Boolean).join(": ") || JSON.stringify(e) : String(e)))
+      .join("; ")
+      .slice(0, 500);
   }
-  if (data.errorMessage) return String(data.errorMessage).slice(0, 200);
+  if (data.error) return String(data.error).slice(0, 500);
+  if (data.message) return String(data.message).slice(0, 500);
+  if (data.MESSAGE) return String(data.MESSAGE).slice(0, 500);
+  if (data.content && typeof data.content === "object" && data.content.message) {
+    return String(data.content.message).slice(0, 500);
+  }
+  if (data.errorMessage) return String(data.errorMessage).slice(0, 500);
+  if (data.raw) return String(data.raw).slice(0, 200);
 
   return "Unknown error";
 }
