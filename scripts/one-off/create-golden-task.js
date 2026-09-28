@@ -1,8 +1,12 @@
 #!/usr/bin/env node
+// HISTORICAL ONE-OFF SCRIPT - not part of the reusable MCP server and not maintained.
+// It was written for a single task on one Teamwork site and contains hardcoded
+// project/task/user/stage IDs for that site. Kept only as a record; do not use it
+// as a usage example. Use the MCP tools (see README) or src/teamworkClient.js.
 
-import { Task, TaskPriority } from './src/Task.js';
-import { TeamworkClient } from './src/teamworkClient.js';
-import { loadConfig } from './src/config.js';
+import { Task, TaskPriority } from '../../src/Task.js';
+import { TeamworkClient } from '../../src/teamworkClient.js';
+import { loadConfig } from '../../src/config.js';
 
 const LONG_DESCRIPTION = `## Overview
 Complete the golden data import system infrastructure to enable full data synchronization from the Scigenix API. This work finalizes the completion percentage calculation system and ensures 100% API field coverage with robust error handling for production reliability.

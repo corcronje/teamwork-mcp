@@ -1,9 +1,13 @@
 #!/usr/bin/env node
+// HISTORICAL ONE-OFF SCRIPT - not part of the reusable MCP server and not maintained.
+// It was written for a single task on one Teamwork site and contains hardcoded
+// project/task/user/stage IDs for that site. Kept only as a record; do not use it
+// as a usage example. Use the MCP tools (see README) or src/teamworkClient.js.
 
-import { Task, TaskPriority } from './src/Task.js';
-import { TeamworkClient } from './src/teamworkClient.js';
-import { loadConfig } from './src/config.js';
-import { logger } from './src/logger.js';
+import { Task, TaskPriority } from '../../src/Task.js';
+import { TeamworkClient } from '../../src/teamworkClient.js';
+import { loadConfig } from '../../src/config.js';
+import { logger } from '../../src/logger.js';
 
 async function createGoldenDataTask() {
   try {

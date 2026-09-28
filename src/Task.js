@@ -102,7 +102,7 @@ export class Task {
       params.description = this.description;
     }
     if (this.assigneeUserId !== null && this.assigneeUserId !== undefined) {
-      params.assigneeUserId = this.assigneeUserId;
+      params.assigneeUserIds = [this.assigneeUserId];
     }
     if (this.priority !== null && this.priority !== undefined) {
       params.priority = this.priority;
@@ -111,7 +111,8 @@ export class Task {
       params.dueDate = Task.formatDate(this.dueDate);
     }
     if (this.stageId !== null && this.stageId !== undefined) {
-      params.stageId = this.stageId;
+      // createTask resolves `stage` (a name or an id) against the project's workflow
+      params.stage = String(this.stageId);
     }
     if (this.workflowId !== null && this.workflowId !== undefined) {
       params.workflowId = this.workflowId;
@@ -130,12 +131,12 @@ export class Task {
    * Add a time entry to this task
    * @param {Object} entry - Time entry details
    * @param {string} entry.date - Date in 'YYYY-MM-DD' format or Date object
-   * @param {string} entry.time - Time in 'HH:MM' format or Date object (optional)
+   * @param {string} entry.time - Start time 'HH:MM' or Date object (required by the client when logging)
    * @param {number} entry.hours - Hours spent (optional, default 0)
    * @param {number} entry.minutes - Minutes spent (optional, default 0)
    * @param {string} entry.description - Work description (optional)
    * @param {boolean} entry.billable - Whether time is billable (optional, default false)
-   * @param {number} entry.personId - User ID for time entry (optional)
+   * @param {number} entry.userId - User ID for time entry (optional, defaults to the token owner; personId accepted)
    */
   addTimeEntry(entry) {
     if (!entry.date) {
@@ -147,14 +148,14 @@ export class Task {
       description: entry.description || '',
       hours: entry.hours || 0,
       minutes: entry.minutes || 0,
-      isbillable: entry.billable || false,
+      isBillable: entry.billable || false,
     };
 
     if (entry.time) {
       timeEntry.time = Task.formatTime(entry.time);
     }
-    if (entry.personId) {
-      timeEntry.personId = entry.personId;
+    if (entry.personId || entry.userId) {
+      timeEntry.userId = entry.userId || entry.personId;
     }
 
     this.timeEntries.push(timeEntry);
@@ -176,8 +177,8 @@ export class Task {
       hours: entry.hours,
       minutes: entry.minutes,
       description: entry.description,
-      isbillable: entry.isbillable,
-      personId: entry.personId || undefined,
+      isBillable: entry.isBillable,
+      userId: entry.userId || undefined,
     }));
   }
 
@@ -227,14 +228,16 @@ export class Task {
 }
 
 /**
- * Priority constants for Teamwork
+ * Priority values accepted by Teamwork v3 ("none" clears the priority).
+ * v3 has exactly three levels; the old numeric 0-4 scale was never valid
+ * (v3 rejects numbers with 400 "expected enum.TaskPriority").
  */
 export const TaskPriority = {
-  HIGHEST: 4,
-  HIGH: 3,
-  NORMAL: 2,
-  LOW: 1,
-  LOWEST: 0,
+  HIGH: "high",
+  MEDIUM: "medium",
+  NORMAL: "medium",
+  LOW: "low",
+  NONE: "none",
 };
 
 export default Task;

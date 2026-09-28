@@ -943,6 +943,11 @@ export class TeamworkClient {
     return this.summarizeTimelog(res?.timelog || {});
   }
 
+  /** Backwards-compatible library alias (personId/isbillable spellings). */
+  addTaskTimeEntry({ personId, userId, isbillable, isBillable, ...rest } = {}) {
+    return this.addTimeEntry({ ...rest, userId: userId ?? personId, isBillable: isBillable ?? isbillable });
+  }
+
   async updateTimeEntry({ timeEntryId, date, time, hours, minutes, description, isBillable } = {}) {
     const id = toId(timeEntryId, "timeEntryId");
     const timelog = compactObject({
