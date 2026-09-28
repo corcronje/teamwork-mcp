@@ -3,13 +3,14 @@
  * Follows MCP spec for version management and feature declarations
  */
 
-export const VERSION = "2.0.0";
+export const VERSION = "3.0.0";
 
-export const MCP_VERSION = "2024-11-05";
+// Negotiated by @modelcontextprotocol/sdk at connect time; informational only.
+export const MCP_VERSION = "2025-06-18";
 
 export const CAPABILITIES = {
   tools: true,
-  resources: false, // Will be enabled in v2.1
+  resources: false,
   prompts: false,
   sampling: false,
   logging: true,
