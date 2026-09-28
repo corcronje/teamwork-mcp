@@ -292,3 +292,24 @@ describe("MCP protocol", () => {
     await client.close();
   });
 });
+
+describe("TaskQueue (v3 and summary task shapes)", async () => {
+  const { TaskQueue } = await import("../src/TaskQueue.js");
+  const tasks = [
+    { id: 1, name: "a", priority: "low", dueDate: "2099-01-02", assigneeUserIds: [7], workflowStages: [{ stageId: 5 }] },
+    { id: 2, name: "b", priority: "high", dueDate: null, assignees: [{ id: 8 }], workflowStages: [{ stageId: 6, stageName: "Done" }] },
+    { id: 3, name: "c", priority: null, dueDate: "2099-01-01", assigneeUserIds: [7, 8], workflowStages: [{ stageId: 0 }] },
+  ];
+  it("sorts by v3 string priority, then due date", () => {
+    assert.deepEqual(TaskQueue.sortByPriority(tasks).map((t) => t.id), [2, 1, 3]);
+  });
+  it("filters by assignee across both shapes", () => {
+    assert.deepEqual(TaskQueue.filterByAssignee(tasks, 8).map((t) => t.id), [2, 3]);
+  });
+  it("groups by stage name or id", () => {
+    assert.deepEqual(Object.keys(TaskQueue.groupByStage(tasks)).sort(), ["5", "Done", "backlog"]);
+  });
+  it("finds tasks without due dates", () => {
+    assert.deepEqual(TaskQueue.filterWithoutDueDate(tasks).map((t) => t.id), [2]);
+  });
+});

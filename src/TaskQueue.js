@@ -1,209 +1,120 @@
 /**
- * TaskQueue - Helper class for task prioritization and lane management
- * Provides methods to work with task queues by priority, stage, and assignment
+ * TaskQueue - helpers for prioritising and grouping task lists client-side.
+ *
+ * Works with both raw Teamwork v3 task objects and the compact summaries that
+ * the list tools / TeamworkClient return (detail: "summary"). Earlier versions
+ * read v1 field names ("due-date", "responsible-party-id", "stage-id") that v3
+ * payloads do not contain, so they silently returned empty results.
  */
 
+const PRIORITY_RANK = { high: 3, medium: 2, low: 1 };
+
+function priorityRank(task) {
+  const p = task?.priority;
+  if (typeof p === "number") return p; // tolerate legacy numeric data
+  return PRIORITY_RANK[String(p ?? "").toLowerCase()] ?? 0;
+}
+
+function dueDate(task) {
+  const raw = task?.dueDate ?? task?.["due-date"];
+  if (!raw) return null;
+  const d = new Date(/^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function assigneeIds(task) {
+  if (Array.isArray(task?.assigneeUserIds)) return task.assigneeUserIds.map(String);
+  if (Array.isArray(task?.assignees)) return task.assignees.map((a) => String(a.id ?? a));
+  const legacy = task?.["responsible-party-id"];
+  return legacy ? String(legacy).split(",") : [];
+}
+
+function stageKey(task) {
+  const ws = task?.workflowStages?.[0];
+  if (ws) return ws.stageName ?? (ws.stageId ? String(ws.stageId) : "backlog");
+  return task?.["stage-id"] ?? task?.stageId ?? "unknown";
+}
+
 export class TaskQueue {
-  /**
-   * Sort tasks by priority and due date
-   * @param {array} tasks - Array of task objects
-   * @returns {array} Sorted tasks (highest priority first, closest due date first)
-   */
+  /** Highest priority first; ties broken by nearest due date (undated last). */
   static sortByPriority(tasks) {
     if (!Array.isArray(tasks)) return [];
-
     return [...tasks].sort((a, b) => {
-      // Sort by priority descending (higher number = higher priority)
-      const aPriority = a.priority || 0;
-      const bPriority = b.priority || 0;
-
-      if (aPriority !== bPriority) {
-        return bPriority - aPriority;
-      }
-
-      // If same priority, sort by due date (closest first)
-      const aDueDate = a['due-date'] ? new Date(a['due-date']) : null;
-      const bDueDate = b['due-date'] ? new Date(b['due-date']) : null;
-
-      if (aDueDate && bDueDate) {
-        return aDueDate.getTime() - bDueDate.getTime();
-      }
-
-      if (aDueDate) return -1; // a has due date, comes first
-      if (bDueDate) return 1;  // b has due date, comes first
-
+      const diff = priorityRank(b) - priorityRank(a);
+      if (diff) return diff;
+      const da = dueDate(a);
+      const db = dueDate(b);
+      if (da && db) return da - db;
+      if (da) return -1;
+      if (db) return 1;
       return 0;
     });
   }
 
-  /**
-   * Group tasks by workflow stage (lane)
-   * @param {array} tasks - Array of task objects
-   * @returns {object} Object with stage IDs as keys, task arrays as values
-   */
+  /** Group by workflow stage (stage name when available, else stage id). */
   static groupByStage(tasks) {
     if (!Array.isArray(tasks)) return {};
-
     const grouped = {};
-
-    tasks.forEach(task => {
-      // Try different possible stage ID fields
-      const stageId = task['stage-id'] ||
-                      task.stageId ||
-                      task['workflow-stage-id'] ||
-                      task['status'] ||
-                      'unknown';
-
-      if (!grouped[stageId]) {
-        grouped[stageId] = [];
-      }
-      grouped[stageId].push(task);
-    });
-
+    for (const task of tasks) (grouped[stageKey(task)] ||= []).push(task);
     return grouped;
   }
 
-  /**
-   * Filter tasks by assignee
-   * @param {array} tasks - Array of task objects
-   * @param {string|number} userId - User ID to filter by
-   * @returns {array} Tasks assigned to the user
-   */
   static filterByAssignee(tasks, userId) {
     if (!Array.isArray(tasks)) return [];
-
-    return tasks.filter(task => {
-      const assignedTo = task['responsible-party-id'] ||
-                        task['assigned-to-id'] ||
-                        task.assigneeUserId;
-      return String(assignedTo) === String(userId);
-    });
+    return tasks.filter((t) => assigneeIds(t).includes(String(userId)));
   }
 
-  /**
-   * Filter tasks by status
-   * @param {array} tasks - Array of task objects
-   * @param {string} status - Status to filter by (e.g., 'new', 'in-progress', 'completed')
-   * @returns {array} Tasks with matching status
-   */
   static filterByStatus(tasks, status) {
     if (!Array.isArray(tasks)) return [];
-
-    return tasks.filter(task => {
-      const taskStatus = task.status || task.currentStatus;
-      return taskStatus === status;
-    });
+    return tasks.filter((t) => (t.status ?? t.currentStatus) === status);
   }
 
-  /**
-   * Get tasks due within N days
-   * @param {array} tasks - Array of task objects
-   * @param {number} daysFromNow - Number of days to look ahead
-   * @returns {array} Tasks due within the timeframe
-   */
+  /** Tasks due between now and N days from now. */
   static filterByDueDate(tasks, daysFromNow = 7) {
     if (!Array.isArray(tasks)) return [];
-
     const now = new Date();
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + daysFromNow);
-
-    return tasks.filter(task => {
-      if (!task['due-date']) return false;
-
-      const dueDate = new Date(task['due-date']);
-      return dueDate >= now && dueDate <= futureDate;
+    const until = new Date(now.getTime() + daysFromNow * 86400000);
+    return tasks.filter((t) => {
+      const d = dueDate(t);
+      return d && d >= now && d <= until;
     });
   }
 
-  /**
-   * Get tasks without a due date
-   * @param {array} tasks - Array of task objects
-   * @returns {array} Tasks without due dates
-   */
   static filterWithoutDueDate(tasks) {
     if (!Array.isArray(tasks)) return [];
-
-    return tasks.filter(task => !task['due-date']);
+    return tasks.filter((t) => !dueDate(t));
   }
 
   /**
-   * Build a priority queue: urgent + due soon + undue
-   * @param {array} tasks - Array of task objects
-   * @returns {object} Organized queue with urgency levels
+   * urgent: high priority or overdue; dueSoon: due within 7 days;
+   * undue: due later; noDueDate: no due date.
    */
   static buildPriorityQueue(tasks) {
-    if (!Array.isArray(tasks)) {
-      return { urgent: [], dueSoon: [], undue: [], noDueDate: [] };
-    }
-
+    const queue = { urgent: [], dueSoon: [], undue: [], noDueDate: [] };
+    if (!Array.isArray(tasks)) return queue;
     const now = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-
-    const queue = {
-      urgent: [],      // High priority OR overdue
-      dueSoon: [],     // Due within 7 days
-      undue: [],       // Low priority, not due soon
-      noDueDate: []    // No due date set
-    };
-
-    tasks.forEach(task => {
-      const priority = task.priority || 0;
-      const dueDate = task['due-date'] ? new Date(task['due-date']) : null;
-
-      if (!dueDate) {
-        queue.noDueDate.push(task);
-      } else if (priority >= 3 || dueDate < now) {
-        // High priority or overdue
-        queue.urgent.push(task);
-      } else if (dueDate <= weekFromNow) {
-        // Due within 7 days
-        queue.dueSoon.push(task);
-      } else {
-        // Lower priority, due later
-        queue.undue.push(task);
-      }
-    });
-
-    // Sort each queue by priority and due date
-    Object.keys(queue).forEach(key => {
-      queue[key] = TaskQueue.sortByPriority(queue[key]);
-    });
-
+    const weekFromNow = new Date(now.getTime() + 7 * 86400000);
+    for (const task of tasks) {
+      const d = dueDate(task);
+      if (!d) queue.noDueDate.push(task);
+      else if (priorityRank(task) >= 3 || d < now) queue.urgent.push(task);
+      else if (d <= weekFromNow) queue.dueSoon.push(task);
+      else queue.undue.push(task);
+    }
+    for (const key of Object.keys(queue)) queue[key] = TaskQueue.sortByPriority(queue[key]);
     return queue;
   }
 
-  /**
-   * Get readable summary of tasks
-   * @param {array} tasks - Array of task objects
-   * @param {number} limit - Maximum tasks to show
-   * @returns {string} Formatted summary
-   */
   static summarize(tasks, limit = 10) {
-    if (!Array.isArray(tasks) || tasks.length === 0) {
-      return 'No tasks';
-    }
-
-    const sorted = TaskQueue.sortByPriority(tasks);
-    const toShow = sorted.slice(0, limit);
-
-    const lines = [
-      `Total: ${tasks.length} tasks${limit < tasks.length ? ` (showing first ${limit})` : ''}`,
-      ''
-    ];
-
-    toShow.forEach((task, i) => {
-      const priority = task.priority || 0;
-      const priorityStr = ['⬜', '🟨', '🟡', '🟠', '🔴'][priority] || '⬜';
-      const name = task.name || task.title || 'Untitled';
-      const dueDate = task['due-date'] ? ` (due: ${task['due-date']})` : '';
-      lines.push(`  ${i + 1}. ${priorityStr} [${task.id}] ${name}${dueDate}`);
+    if (!Array.isArray(tasks) || tasks.length === 0) return "No tasks";
+    const sorted = TaskQueue.sortByPriority(tasks).slice(0, limit);
+    const lines = [`Total: ${tasks.length} tasks${limit < tasks.length ? ` (showing first ${limit})` : ""}`, ""];
+    sorted.forEach((task, i) => {
+      const p = ["-", "L", "M", "H"][priorityRank(task)] ?? "-";
+      const d = dueDate(task);
+      lines.push(`  ${i + 1}. [${p}] [${task.id}] ${task.name || task.title || "Untitled"}${d ? ` (due: ${d.toISOString().slice(0, 10)})` : ""}`);
     });
-
-    return lines.join('\n');
+    return lines.join("\n");
   }
 }
 
