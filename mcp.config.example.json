@@ -1,0 +1,15 @@
+{
+  "baseUrl": "https://your-site.teamwork.com",
+  "apiVersion": "v3",
+  "token": "replace_with_real_token",
+  "authMode": "basic_token_x",
+  "readOnly": true,
+  "allowedProjectIds": [
+    "1234567",
+    "2345678"
+  ],
+  "requestTimeout": 30000,
+  "maxRetries": 3,
+  "logLevel": "info",
+  "uploadRoots": []
+}
