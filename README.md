@@ -160,8 +160,6 @@ upload directory, so it cannot write anywhere else. See [TEST_RESULTS.md](TEST_R
 
 Library use (`src/teamworkClient.js`, plus the `Task` and `TaskQueue` helpers) is
 described in [docs/TASK_CLASS.md](docs/TASK_CLASS.md) and [docs/TASK_QUEUE.md](docs/TASK_QUEUE.md).
-`scripts/one-off/` holds historical single-use scripts with hardcoded ids from one
-site. They are not part of the product.
 
 ## Documentation
 

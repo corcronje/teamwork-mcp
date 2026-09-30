@@ -2,12 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
-## [3.0.0] - 2026-09-28
+## [3.0.0] - 2026-09-30
 
 A correctness and completeness release. Every Teamwork endpoint and field used was
 re-verified against a live site. Most 2.x bugs returned HTTP 200 while doing the wrong
 thing, because Teamwork silently ignores unknown query parameters and body fields.
 Evidence for each item is in [STATUS.md](STATUS.md#verified-teamwork-api-behaviour).
+
+### Release hardening
+
+- Resolved all `npm audit` findings in production dependencies (`hono`, `fast-uri`,
+  `body-parser`, `@hono/node-server`) via lockfile update.
+- `scripts/one-off/` (client-specific task scripts) is no longer tracked and is gitignored.
+- `.gitignore` now excludes `.env.*`, `.mcp.json`, `secrets.json`, local agent files and build output.
 
 ### Why 3.0.0 (breaking)
 

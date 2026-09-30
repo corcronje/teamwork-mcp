@@ -1,16 +1,35 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Secrets and local configuration (may contain API tokens, internal URLs, absolute paths)
 .env
-npm-debug.log*
-.DS_Store
+.env.*
+!.env.example
+mcp.config.json
+secrets.json
+.mcp.json
+*.pem
+*.key
+
+# Local agent instructions (reference sandbox project ids and internal hosts)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
 
 # Local analysis/scratch artifacts
 .stage-samples.txt
 .task-analysis.txt
 .task-structure.txt
+scripts/one-off/
 
-# Editor/runtime leftovers
-.vscode/
+# Logs, coverage and build output
 *.log
+npm-debug.log*
+coverage/
+.nyc_output/
+*.tgz
 
-# Real config files may contain the API token
-mcp.config.json
+# OS / editor leftovers
+.DS_Store
+.vscode/
+.idea/
